@@ -1131,12 +1131,9 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                   <button
                     onClick={() => {
                       if (activeProject && activeProject.pages.length <= 1) {
-                        alert("Your newsletter must have at least one page.");
                         return;
                       }
-                      if (confirm("Are you sure you want to delete the current page?")) {
-                        deletePage(activePageId);
-                      }
+                      deletePage(activePageId);
                     }}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-red-600/10"
                     title="Delete Current Page"

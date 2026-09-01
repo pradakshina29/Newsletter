@@ -93,7 +93,6 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
   // Clear current page elements to a pristine blank template (preserving locked CTRL+READ header)
   const handleClearToBlankTemplate = async () => {
     if (!currentPage) return;
-    if (!confirm(`Clear Page ${activePageNum} content to a blank template? Header branding will remain locked.`)) return;
 
     // Filter out content elements, preserving locked header elements (y < 200 or locked: true)
     const headerElements = (currentPage.elements || []).filter((el: any) => el.locked || el.id.includes('_hdr') || el.id.includes('hdr_') || el.id.includes('line_hdr'));
