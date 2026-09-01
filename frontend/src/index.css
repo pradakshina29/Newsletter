@@ -1,0 +1,220 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900;
+  }
+}
+
+/* Glassmorphism Styles */
+.glass {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.glass-dark {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.04);
+}
+
+/* Custom grid background for builder workspace */
+.editor-grid-bg {
+  background-color: #f1f5f9;
+  background-image: 
+    radial-gradient(#cbd5e1 1px, transparent 1px), 
+    radial-gradient(#cbd5e1 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+}
+
+.editor-grid-bg.dark-mode {
+  background-color: #0b0f19;
+  background-image: 
+    radial-gradient(#334155 1px, transparent 1px), 
+    radial-gradient(#334155 1px, transparent 1px);
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+}
+
+/* Hide standard scrollbars for clean UI */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Print/A4 Bleed Settings Overlay styling */
+.bleed-guide::after {
+  content: '';
+  position: absolute;
+  top: 15px; /* 15px bleed line */
+  left: 15px;
+  right: 15px;
+  bottom: 15px;
+  border: 1px dashed rgba(249, 115, 22, 0.4);
+  pointer-events: none;
+  border-radius: 4px;
+}
+
+/* Smart Guides Snap lines */
+.snap-guide-x {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  border-top: 1px dashed #f97316;
+  z-index: 50;
+  pointer-events: none;
+}
+
+.snap-guide-y {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  border-left: 1px dashed #f97316;
+  z-index: 50;
+  pointer-events: none;
+}
+
+/* Dark Mode Theme Overrides */
+.dark body {
+  background-color: #0b0f19 !important;
+  color: #f8fafc !important;
+}
+
+.dark .min-h-screen, .dark .bg-slate-50, .dark .bg-slate-100, .dark .bg-slate-200, .dark .bg-blue-50\/50, .dark .bg-slate-50\/50 {
+  background-color: #0b0f19 !important;
+  background-image: none !important;
+}
+
+.dark .bg-white {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-slate-50.border, .dark .bg-slate-50.border-slate-200 {
+  background-color: #111827 !important;
+  border-color: #334155 !important;
+}
+
+.dark .text-secondary, .dark .text-slate-800, .dark .text-slate-700, .dark .text-slate-650 {
+  color: #f1f5f9 !important;
+}
+
+.dark .text-slate-600, .dark .text-slate-500 {
+  color: #94a3b8 !important;
+}
+
+.dark .border-slate-100, .dark .border-slate-200, .dark .border-slate-300, .dark .border-slate-200\/50, .dark .border-slate-100\/60, .dark .border-slate-200\/60 {
+  border-color: #334155 !important;
+}
+
+/* Modals & Dialogs */
+.dark .glass {
+  background: rgba(15, 23, 42, 0.85) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f1f5f9 !important;
+}
+
+.dark .bg-white.rounded-2xl {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+/* Form fields & inputs */
+.dark input[type="text"], .dark input[type="password"], .dark input[type="email"], .dark select, .dark textarea {
+  background-color: #111827 !important;
+  border-color: #334155 !important;
+  color: #f8fafc !important;
+}
+
+/* Sidebar and properties panels inside Editor */
+.dark aside, .dark .sidebar, .dark .bg-slate-50.border-r, .dark .bg-slate-50.border-l {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+.dark .bg-white.border-l, .dark .bg-white.border-r {
+  background-color: #111827 !important;
+  border-color: #1f2937 !important;
+}
+
+/* Sidebar Tools tabs container */
+.dark .bg-slate-100.border-r {
+  background-color: #0b0f19 !important;
+  border-color: #1e293b !important;
+}
+
+.dark .bg-slate-50 {
+  background-color: #1e293b !important;
+}
+
+/* Text selections & editor tools */
+.dark .hover\:bg-slate-50:hover {
+  background-color: #334155 !important;
+}
+.dark .hover\:bg-slate-100:hover {
+  background-color: #1f2937 !important;
+}
+
+.dark .text-slate-400 {
+  color: #64748b !important;
+}
+
+.dark .bg-blue-50\/50 {
+  background-color: #1e293b !important;
+  border-color: #334155 !important;
+}
+
+.dark .bg-slate-50.border {
+  background-color: #1e293b !important;
+}
+
+.dark .bg-slate-100 {
+  background-color: #1e293b !important;
+}
+
+/* Dark mode canvas viewport background grids */
+.dark .editor-grid-bg {
+  background-color: #0b0f19 !important;
+  background-image: 
+    radial-gradient(#334155 1px, transparent 1px), 
+    radial-gradient(#334155 1px, transparent 1px) !important;
+  background-size: 20px 20px;
+  background-position: 0 0, 10px 10px;
+}

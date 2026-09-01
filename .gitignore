@@ -1,0 +1,33 @@
+# Heavy / Binary Files
+.maven/
+backend/data/
+ref_pages/
+*.pdf
+*.db
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+.npm
+*.log
+
+# Java / Spring Boot Backend
+target/
+*.jar
+*.war
+.mvn/
+mvnw
+mvnw.cmd
+
+# IDE & OS Files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.iml
+
+# Local env
+.env
+.env.local

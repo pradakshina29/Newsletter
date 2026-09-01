@@ -1,0 +1,21 @@
+services:
+  # Spring Boot Backend Service
+  - type: web
+    name: kprcas-newsletter-backend
+    env: java
+    buildCommand: ./mvnw clean package -DskipTests || mvn clean package -DskipTests
+    startCommand: java -jar target/*.jar
+    envVars:
+      - key: PORT
+        value: 8080
+
+  # React Frontend Static Site
+  - type: web
+    name: kprcas-newsletter-studio
+    env: static
+    buildCommand: cd frontend && npm install && npm run build
+    staticPublishPath: ./frontend/dist
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
