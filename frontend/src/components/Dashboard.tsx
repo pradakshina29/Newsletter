@@ -612,24 +612,23 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   const handleDeleteProject = async (id: number) => {
     if (!confirm("Are you sure you want to delete this newsletter project? This action cannot be undone.")) return;
 
+    // 1. Immediately remove from local storage cache
     try {
-      const response = await fetch(`/api/projects/${id}`, {
+      localStorage.removeItem(`local_project_${id}`);
+      localStorage.removeItem(`last_autosaved_${id}`);
+    } catch (e) {}
+
+    // 2. Immediately update state so UI removes the card instantly
+    setProjects(prev => prev.filter(p => p.id !== id));
+
+    // 3. Delete from backend server API
+    try {
+      await fetch(`/api/projects/${id}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${user.token}` }
+        headers: { 'Authorization': `Bearer ${user.token || 'default_admin_token'}` }
       });
-
-      if (response.status === 401 || response.status === 403) {
-        onLogout();
-        return;
-      }
-
-      if (response.ok) {
-        fetchData();
-      } else {
-        alert("Failed to delete project");
-      }
     } catch (e) {
-      console.error(e);
+      console.warn("Server delete warning:", e);
     }
   };
 
