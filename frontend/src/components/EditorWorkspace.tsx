@@ -364,66 +364,94 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
             parsedProject.pages = defaultPages;
           } else if (parsedProject.pages.length > 0) {
             const deptUpper = (parsedProject.department || "Information Technology").toUpperCase();
-            
-            // Auto-upgrade Page 8 to full Editorial Board layout
-            const p8Index = parsedProject.pages.findIndex((p: any) => p.id === 'page_8' || p.title?.includes('Editorial'));
-            if (p8Index !== -1) {
-              const p8 = parsedProject.pages[p8Index];
-              const hasRibbon = p8.elements.some((el: any) => el.id === 'p8_ribbon_text');
-              if (!hasRibbon) {
-                p8.elements = [
-                  { id: "p8_bg", type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                  { id: "p8_line_hdr0", type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-                  { id: "p8_dept_hdr", type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                  { id: "p8_date_hdr", type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                  { id: "p8_line_hdr1", type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-                  { id: "p8_title_hdr", type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                  { id: "p8_line_hdr2_left", type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-                  { id: "p8_subtitle_hdr", type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                  { id: "p8_line_hdr2_right", type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+            const lastIdx = parsedProject.pages.length - 1;
 
-                  { id: "p8_ribbon_bg", type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
-                  { id: "p8_ribbon_text", type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
+            // Extract existing editorial board values (chief name, role, co name, role, pics)
+            let chiefName = "DR. S. SRIVIDHYA";
+            let chiefRole = "ASSOCIATE PROFESSOR AND HEAD";
+            let chiefPic = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80";
 
-                  { id: "p8_badge_chief_bg", type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                  { id: "p8_badge_chief_text", type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                  { id: "p8_pic_chief", type: "image", x: 135, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" },
-                  { id: "p8_name_chief", type: "text", x: 50, y: 540, width: 350, height: 25, text: "DR. S. SRIVIDHYA", fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                  { id: "p8_desig_chief", type: "text", x: 50, y: 565, width: 350, height: 20, text: "ASSOCIATE PROFESSOR AND HEAD", fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                  { id: "p8_dept_chief", type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
+            let coName = "MR. AKHIL K M";
+            let coRole = "ASSISTANT PROFESSOR";
+            let coPic = "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80";
 
-                  { id: "p8_badge_co_bg", type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                  { id: "p8_badge_co_text", type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                  { id: "p8_pic_co", type: "image", x: 485, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" },
-                  { id: "p8_name_co", type: "text", x: 400, y: 540, width: 350, height: 25, text: "MR. AKHIL K M", fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                  { id: "p8_desig_co", type: "text", x: 400, y: 565, width: 350, height: 20, text: "ASSISTANT PROFESSOR", fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                  { id: "p8_dept_co", type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-                  { id: "p8_line_div_left", type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-                  { id: "p8_diamond_div1", type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                  { id: "p8_diamond_div2", type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                  { id: "p8_line_div_right", type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
-
-                  { id: "p8_footer_text", type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page 8 • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-                ];
-              } else {
-                // Enforce circular photo placeholders and department text on existing Page 8
-                p8.elements = p8.elements.map((el: any) => {
-                  if (el.id === 'p8_dept_chief' || el.id === 'p8_dept_co') {
-                    return { ...el, text: `DEPT. OF ${deptUpper}` };
-                  }
-                  return el;
+            parsedProject.pages.forEach((p: any) => {
+              if (p.elements) {
+                p.elements.forEach((el: any) => {
+                  if ((el.id?.includes('name_chief') || el.id === 'p8_name_chief') && el.text) chiefName = el.text;
+                  if ((el.id?.includes('desig_chief') || el.id === 'p8_desig_chief') && el.text) chiefRole = el.text;
+                  if ((el.id?.includes('pic_chief') || el.id === 'p8_pic_chief') && el.url) chiefPic = el.url;
+                  if ((el.id?.includes('name_co') || el.id === 'p8_name_co') && el.text) coName = el.text;
+                  if ((el.id?.includes('desig_co') || el.id === 'p8_desig_co') && el.text) coRole = el.text;
+                  if ((el.id?.includes('pic_co') || el.id === 'p8_pic_co') && el.url) coPic = el.url;
                 });
-                const hasChiefPic = p8.elements.some((el: any) => el.id === 'p8_pic_chief');
-                if (!hasChiefPic) {
-                  p8.elements.push({ id: "p8_pic_chief", type: "image", x: 135, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" });
+              }
+            });
+
+            parsedProject.pages = parsedProject.pages.map((page: any, idx: number) => {
+              const pNum = idx + 1;
+              const isLast = idx === lastIdx;
+              const hasRibbon = page.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
+
+              if (isLast) {
+                page.title = "Editorial Board";
+                if (!hasRibbon) {
+                  page.elements = [
+                    { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+
+                    { id: `p${pNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
+                    { id: `p${pNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
+
+                    { id: `p${pNum}_badge_chief_bg`, type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
+                    { id: `p${pNum}_badge_chief_text`, type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
+                    { id: `p${pNum}_pic_chief`, type: "image", x: 135, y: 340, width: 180, height: 180, url: chiefPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
+                    { id: `p${pNum}_name_chief`, type: "text", x: 50, y: 540, width: 350, height: 25, text: chiefName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
+                    { id: `p${pNum}_desig_chief`, type: "text", x: 50, y: 565, width: 350, height: 20, text: chiefRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
+                    { id: `p${pNum}_dept_chief`, type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
+
+                    { id: `p${pNum}_badge_co_bg`, type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
+                    { id: `p${pNum}_badge_co_text`, type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
+                    { id: `p${pNum}_pic_co`, type: "image", x: 485, y: 340, width: 180, height: 180, url: coPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
+                    { id: `p${pNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: coName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
+                    { id: `p${pNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
+                    { id: `p${pNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
+
+                    { id: `p${pNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
+                    { id: `p${pNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
+                    { id: `p${pNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
+                    { id: `p${pNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
+
+                    { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+                  ];
                 }
-                const hasCoPic = p8.elements.some((el: any) => el.id === 'p8_pic_co');
-                if (!hasCoPic) {
-                  p8.elements.push({ id: "p8_pic_co", type: "image", x: 485, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" });
+              } else {
+                // If an intermediate page has Editorial Board elements (e.g. Page 8 when total pages = 13), revert it to a standard page header
+                if (hasRibbon) {
+                  page.title = `Page ${pNum}`;
+                  page.elements = [
+                    { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+                    { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+                  ];
                 }
               }
-            }
+              return page;
+            });
 
             // Ensure Page 1 has properly aligned logos and campus image
             const p1 = parsedProject.pages[0];
@@ -968,12 +996,16 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           {/* Cloud Save status indicator & button */}
           <button
             onClick={() => saveProject()}
-            className="flex items-center space-x-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs text-slate-300 hover:text-white transition-colors"
-            title="Manual Save to Cloud"
+            className={`flex items-center space-x-1.5 px-3 py-1.5 border rounded-xl text-xs transition-all shadow-xs ${
+              isSaving 
+                ? 'bg-blue-500/20 border-blue-400/40 text-blue-300 animate-pulse' 
+                : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/20'
+            }`}
+            title="Click to trigger manual Cloud & Local Save"
           >
-            <Save className="w-3.5 h-3.5 text-blue-400" />
-            <span className="hidden md:inline text-[10px] font-medium text-slate-300">
-              {isSaving ? 'Saving...' : 'Saved'}
+            <Save className={`w-3.5 h-3.5 ${isSaving ? 'text-blue-400 animate-spin' : 'text-emerald-400'}`} />
+            <span className="hidden md:inline text-[10px] font-extrabold tracking-wide">
+              {isSaving ? 'Cloud Saving...' : 'Cloud Autosaved'}
             </span>
           </button>
 
