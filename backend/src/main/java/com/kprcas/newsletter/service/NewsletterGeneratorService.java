@@ -11,6 +11,10 @@ public class NewsletterGeneratorService {
         public String title = "CAMPUS ACTIVITY";
         public String content = "";
         public String type = "Event Highlight";
+        public String teamName = "";
+        public String members = "";
+        public String className = "";
+        public String studentName = "";
         public List<String> facts = new ArrayList<>();
         public List<String> images = new ArrayList<>();
     }
@@ -487,11 +491,15 @@ public class NewsletterGeneratorService {
         elements.add(textEl("p8_ribbon_text", "EDITORIAL BOARD", 80, 228, 640, 30, 20, true, "center", "#0f172a"));
 
         String chiefEditor = extractEditorName(prompt, "Chief Editor");
-        String coEditor = extractEditorName(prompt, "Co-Editor");
-        String facultyCoordinator = extractEditorName(prompt, "Faculty Coordinator");
-        String studentCoordinator = extractEditorName(prompt, "Student Coordinator");
-
+        if (chiefEditor.isEmpty()) chiefEditor = extractEditorName(prompt, "Faculty Coordinator");
+        if (chiefEditor.isEmpty()) chiefEditor = extractEditorName(prompt, "Chief");
+        if (chiefEditor.isEmpty()) chiefEditor = extractEditorName(prompt, "Faculty");
         if (chiefEditor.isEmpty()) chiefEditor = "DR. S. SRIVIDHYA";
+
+        String coEditor = extractEditorName(prompt, "Co-Editor");
+        if (coEditor.isEmpty()) coEditor = extractEditorName(prompt, "Student Coordinator");
+        if (coEditor.isEmpty()) coEditor = extractEditorName(prompt, "Co Editor");
+        if (coEditor.isEmpty()) coEditor = extractEditorName(prompt, "Student");
         if (coEditor.isEmpty()) coEditor = "MR. AKHIL K M";
 
         // Left Column: Chief Editor / Faculty
@@ -699,6 +707,11 @@ public class NewsletterGeneratorService {
             rawChunks.add(currentBlock.toString().trim());
         }
 
+        String teamName = extractTeamName(prompt);
+        String members = extractMembers(prompt);
+        String className = extractClassName(prompt);
+        String studentName = extractStudentName(prompt);
+
         for (String chunk : rawChunks) {
             String lower = chunk.toLowerCase();
             if (lower.contains("chief editor") || lower.contains("co-editor") || lower.contains("faculty coordinator") || lower.contains("student coordinator")) {
@@ -714,6 +727,10 @@ public class NewsletterGeneratorService {
             Activity act = new Activity();
             act.title = extractActivityTitle(cleanedChunk);
             act.type = detectEventType(cleanedChunk);
+            act.teamName = teamName;
+            act.members = members;
+            act.className = className;
+            act.studentName = studentName;
             act.content = enhanceAcademicWriting(cleanedChunk, department, date);
             act.images = getImagesForActivity(department, act.type, act.title);
             list.add(act);
@@ -723,6 +740,10 @@ public class NewsletterGeneratorService {
             Activity act = new Activity();
             act.title = "Department Activity";
             act.type = "Highlights";
+            act.teamName = teamName;
+            act.members = members;
+            act.className = className;
+            act.studentName = studentName;
             act.content = "The Department of " + department + " conducted engaging academic and extra-curricular programs during this period. " +
                           "These sessions provided students with practical exposure and key learning insights.";
             act.images = getImagesForActivity(department, "General", "");
@@ -730,6 +751,49 @@ public class NewsletterGeneratorService {
         }
 
         return list;
+    }
+
+    public String extractTeamName(String prompt) {
+        if (prompt == null) return "";
+        Pattern p = Pattern.compile("(?i)(?:team name:?|team:?|team name is)\\s*([^\\n,.]+)", Pattern.CASE_INSENSITIVE);
+        Matcher m = p.matcher(prompt);
+        if (m.find()) {
+            return m.group(1).trim().replace("\"", "");
+        }
+        return "";
+    }
+
+    public String extractMembers(String prompt) {
+        if (prompt == null) return "";
+        Pattern p = Pattern.compile("(?i)(?:members?:?|team members?:?|members name:?|members list:?)\\s*([^\\n]+)", Pattern.CASE_INSENSITIVE);
+        Matcher m = p.matcher(prompt);
+        if (m.find()) {
+            return m.group(1).trim().replace("\"", "");
+        }
+        return "";
+    }
+
+    public String extractClassName(String prompt) {
+        if (prompt == null) return "";
+        Pattern p = Pattern.compile("(?i)(?:class:?|class/dept:?|section:?|batch:?)\\s*([^\\n,.]+)", Pattern.CASE_INSENSITIVE);
+        Matcher m = p.matcher(prompt);
+        if (m.find()) {
+            return m.group(1).trim().replace("\"", "");
+        }
+        return "";
+    }
+
+    public String extractStudentName(String prompt) {
+        if (prompt == null) return "";
+        Pattern p = Pattern.compile("(?i)(?:student name:?|name:?|student:?)\\s*([^\\n,.]+)", Pattern.CASE_INSENSITIVE);
+        Matcher m = p.matcher(prompt);
+        if (m.find()) {
+            String val = m.group(1).trim().replace("\"", "");
+            if (!val.toLowerCase().startsWith("department") && !val.toLowerCase().startsWith("kpr")) {
+                return val;
+            }
+        }
+        return "";
     }
 
     private String extractActivityTitle(String chunk) {

@@ -431,6 +431,11 @@ public class AiController {
             recommendations.add(rec);
         }
 
+        String teamName = newsletterGeneratorService.extractTeamName(prompt);
+        String members = newsletterGeneratorService.extractMembers(prompt);
+        String className = newsletterGeneratorService.extractClassName(prompt);
+        String studentName = newsletterGeneratorService.extractStudentName(prompt);
+
         Map<String, Object> response = new HashMap<>();
         response.put("prompt", prompt);
         response.put("eventType", eventType);
@@ -442,6 +447,10 @@ public class AiController {
         response.put("institution", institution);
         response.put("recommendations", recommendations);
         response.put("title", title);
+        response.put("teamName", teamName);
+        response.put("members", members);
+        response.put("className", className);
+        response.put("studentName", studentName);
 
         return ResponseEntity.ok(response);
     }

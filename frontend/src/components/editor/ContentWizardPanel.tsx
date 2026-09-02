@@ -61,14 +61,14 @@ const ContentWizardPanel: React.FC = () => {
   const [selectedTone, setSelectedTone] = useState<string>("encouraging");
 
   // Per-page dynamic form values
-  const [studentForms, setStudentForms] = useState<{ [pageNum: number]: { title: string; student: string; classDept: string; award: string; host: string; details: string; keywords: string } }>({});
+  const [studentForms, setStudentForms] = useState<{ [pageNum: number]: { title: string; teamName: string; student: string; classDept: string; award: string; host: string; details: string; keywords: string } }>({});
   const [facultyForms, setFacultyForms] = useState<{ [pageNum: number]: { faculty: string; paper: string; journal: string; date: string; contribution: string } }>({});
   const [placementForms, setPlacementForms] = useState<{ [pageNum: number]: { company: string; domain: string; count: string; package: string; highlights: string } }>({});
   const [workshopForms, setWorkshopForms] = useState<{ [pageNum: number]: { title: string; speaker: string; date: string; audience: string; topics: string; keywords: string } }>({});
   const [welcomeForms, setWelcomeForms] = useState<{ [pageNum: number]: { title: string; guest: string; date: string; highlights: string; advice: string } }>({});
   const [customForms, setCustomForms] = useState<{ [pageNum: number]: { title: string; person: string; recipient: string; details: string; keywords: string } }>({});
 
-  const getStudentForm = (pageNum: number) => studentForms[pageNum] || { title: '', student: '', classDept: '', award: '', host: '', details: '', keywords: '' };
+  const getStudentForm = (pageNum: number) => studentForms[pageNum] || { title: '', teamName: '', student: '', classDept: '', award: '', host: '', details: '', keywords: '' };
   const updateStudentForm = (pageNum: number, field: string, val: string) => {
     setStudentForms(prev => ({ ...prev, [pageNum]: { ...getStudentForm(pageNum), [field]: val } }));
   };
@@ -388,9 +388,10 @@ const ContentWizardPanel: React.FC = () => {
       if (activeCategory === 'student') {
         const sForm = getStudentForm(pageNum);
         headlineVal = sForm.title ? detectAndFixCase(sForm.title, 'title') : detectAndFixCase(page.title || "STUDENT ACHIEVEMENTS", 'title');
-        subTitleVal = sForm.award ? `Project Purpose: ${detectAndFixCase(sForm.award, 'title')}` : "Department Student Recognition";
-        if (!structuredText.trim() || sForm.title || sForm.student || sForm.award || sForm.details || sForm.keywords || sForm.host) {
+        subTitleVal = sForm.teamName ? `Team: ${detectAndFixCase(sForm.teamName, 'title')}` : sForm.award ? `Project Purpose: ${detectAndFixCase(sForm.award, 'title')}` : "Department Student Recognition";
+        if (!structuredText.trim() || sForm.title || sForm.teamName || sForm.student || sForm.award || sForm.details || sForm.keywords || sForm.host) {
           const cleanTitle = sForm.title ? detectAndFixCase(sForm.title, 'title') : (page.title || 'Student Academic Initiative');
+          const cleanTeamName = sForm.teamName ? detectAndFixCase(sForm.teamName, 'title') : '';
           const cleanHost = sForm.host ? detectAndFixCase(sForm.host, 'title') : 'Respected Principal Dr. P. Geetha, Deans of various schools, and Heads of Departments';
           const cleanStudent = sForm.student ? detectAndFixCase(sForm.student, 'title') : 'Our Student Delegation';
           const cleanClassDept = sForm.classDept ? detectAndFixCase(sForm.classDept, 'upper') : `DEPT. OF ${(activeProject.department || "Information Technology").toUpperCase()}`;
@@ -400,13 +401,14 @@ const ContentWizardPanel: React.FC = () => {
 
           const sentences: string[] = [
             `The Department organized the academic initiative titled "${cleanTitle}" (${cleanAward}) hosted at KPRCAS campus.`,
-            `The student delegation (${cleanStudent}), actively representing ${cleanClassDept}, displayed exemplary technical capability and high enthusiasm.`,
+            cleanTeamName ? `The project was engineered by Team "${cleanTeamName}" from ${cleanClassDept}.` : '',
+            `The student team members (${cleanStudent}), actively representing ${cleanClassDept}, displayed exemplary technical capability and high enthusiasm.`,
             `During the main program session, the project team delivered an executive presentation before ${cleanHost}, demonstrating system architecture and live workflow.`,
             `Key project highlights included student web app deployment, live feature demonstration, and interactive module testing.`,
             `The executive leadership team expressed immense appreciation for the students' problem-solving mindset, practical execution, and dedicated teamwork.`,
             cleanDetails ? cleanDetails : `Focus areas and core event highlights included: ${cleanKeywords}.`,
             `The department warmly congratulates the students on their active participation, exemplary dedication, and outstanding academic initiative!`
-          ];
+          ].filter(Boolean);
           structuredText = detectAndFixCase(sentences.join(' '), 'sentence');
         }
       } else if (activeCategory === 'faculty') {
@@ -976,6 +978,7 @@ const ContentWizardPanel: React.FC = () => {
             ...prev,
             [pageNum]: {
               title,
+              teamName: "Team Innovation",
               student: "S. KAVIN & TEAM (III YEAR B.SC IT)",
               award: "FIRST PLACE & GOLD MEDAL",
               host: "NATIONAL TECH FEST 2026",
@@ -2526,6 +2529,17 @@ const ContentWizardPanel: React.FC = () => {
                           placeholder="e.g. Secure Online Voting System"
                           value={getStudentForm(activePageNum).title}
                           onChange={e => updateStudentForm(activePageNum, 'title', e.target.value)}
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                        />
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-bold text-slate-400 uppercase block">Team Name</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Code Ninjas / Team Innovation"
+                          value={getStudentForm(activePageNum).teamName}
+                          onChange={e => updateStudentForm(activePageNum, 'teamName', e.target.value)}
                           className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-850 rounded-xl px-3.5 py-2 text-xs text-slate-800 dark:text-slate-100 placeholder-slate-450 focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                         />
                       </div>
