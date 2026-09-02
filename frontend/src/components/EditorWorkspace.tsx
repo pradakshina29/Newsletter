@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEditor } from '../context/EditorContext';
+import { useNotification } from '../context/NotificationContext';
 import { UserSession } from '../types/editor';
 import SidebarTools from './editor/SidebarTools';
 import CanvasWorkspace from './editor/CanvasWorkspace';
@@ -23,6 +24,7 @@ interface EditorWorkspaceProps {
 }
 
 const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onClose, darkMode, toggleDarkMode }) => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const {
     activeProject,
     selectedElementId,
@@ -82,14 +84,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           loadProject(updatedProject);
           await saveProject(updatedProject);
           confetti({ particleCount: 80, spread: 60, origin: { y: 0.7 } });
-          alert(data.message || "Gemini AI inspected and perfected layout alignment!");
+          showSuccess(data.message || "Gemini AI inspected and perfected layout alignment!", "Layout Perfected");
         }
       } else {
-        alert("Failed to verify layout.");
+        showError("Failed to verify layout.", "Layout Check Failed");
       }
     } catch (err) {
       console.error(err);
-      alert("Error verifying layout.");
+      showError("Error verifying layout.", "Layout Verification Error");
     } finally {
       setVerifyingLayout(false);
     }
@@ -551,10 +553,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         if (!isStudent) {
           confetti({ particleCount: 150, spread: 80, origin: { y: 0.6 } });
         }
-        alert(isStudent ? 'Draft submitted successfully!' : 'Newsletter published live!');
+        showSuccess(isStudent ? 'Draft submitted successfully!' : 'Newsletter published live!', 'Publication Success');
         onClose();
       } else {
-        alert('Publication update failed.');
+        showError('Publication update failed.', 'Update Failed');
       }
     } catch (e) {
       console.error(e);
@@ -570,7 +572,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
     try {
       await saveProject();
       if (!activeProject || !activeProject.pages || activeProject.pages.length === 0) {
-        alert("No pages found to export.");
+        showWarning("No pages found to export.", "Export Notice");
         setExporting(false);
         return;
       }
@@ -656,9 +658,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       document.body.removeChild(exportContainer);
       pdf.save(`${activeProject.name.replace(/ /g, '_')}_KPRCAS.pdf`);
       confetti({ particleCount: 120, spread: 70, colors: ['#1e40af', '#f97316', '#0f172a'] });
+      showSuccess("PDF export completed successfully!", "Export PDF");
     } catch (e) {
       console.error("PDF generation failure", e);
-      alert("Error printing PDF document.");
+      showError("Error printing PDF document.", "Export PDF Error");
     } finally {
       setExporting(false);
     }
@@ -667,12 +670,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
   // DOCX Export Engine with real embedded ImageRun objects
   const handleExportDOCX = async () => {
     if (!activeProject) return;
+
     setDocxGenerating(true);
+    setShowExportModal(false);
+
     try {
       await saveProject();
       const docChildren: any[] = [];
 
-      // Add cover header info
       docChildren.push(
         new Paragraph({
           children: [
@@ -800,9 +805,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+      showSuccess("DOCX document exported successfully!", "Export Word");
     } catch (err) {
       console.error("DOCX Export failed", err);
-      alert("An error occurred during DOCX generation.");
+      showError("An error occurred during DOCX generation.", "Export Word Error");
     } finally {
       setDocxGenerating(false);
     }

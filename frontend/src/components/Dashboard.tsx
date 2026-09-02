@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { UserSession, ProjectData } from '../types/editor';
+import { useNotification } from '../context/NotificationContext';
 import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles, Shield, Edit, Edit3, Eye, Save, Layers, Copy, Trash2, Folder, ExternalLink, Sun, Moon, Upload } from 'lucide-react';
 
 interface DashboardProps {
@@ -113,6 +114,7 @@ const createBlankNewsletterContent = (_name: string, department: string) => {
 };
 
 const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, onOpenAdmin, darkMode, toggleDarkMode }) => {
+  const { showSuccess, showError, showWarning } = useNotification();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [templates, setTemplates] = useState<ProjectData[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('All');
@@ -395,7 +397,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   const startSpeechRecognition = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      alert("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.");
+      showWarning("Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari.", "Voice Input");
       return;
     }
 
@@ -479,11 +481,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
           setSelectedTemplateRecId(data.recommendations[0].id);
         }
       } else {
-        alert("Failed to analyze prompt. Please try again.");
+        showError("Failed to analyze prompt. Please try again.", "Analysis Failed");
       }
     } catch (err) {
       console.error(err);
-      alert("Error analyzing prompt.");
+      showError("Error analyzing prompt.", "Analysis Error");
     } finally {
       setAiAnalyzing(false);
     }
@@ -506,7 +508,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
       }) || templates[0];
 
       if (!targetDbTemplate) {
-        alert("No templates found in system database. Please seed templates first.");
+        showWarning("No templates found in system database. Please seed templates first.", "Templates Missing");
         return;
       }
 
@@ -541,13 +543,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
         setAiPrompt('');
         setAnalyzedResult(null);
         setAiStep(1);
+        showSuccess("Newsletter generated successfully!", "Generation Complete");
         onEditProject(newProject.id);
       } else {
-        alert("Failed to generate publication from template.");
+        showError("Failed to generate publication from template.", "Generation Failed");
       }
     } catch (err) {
       console.error(err);
-      alert("Error generating publication.");
+      showError("Error generating publication.", "Generation Error");
     } finally {
       setAiGenerating(false);
     }
@@ -567,9 +570,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
       }
 
       if (response.ok) {
+        showSuccess("Newsletter duplicated successfully!", "Duplicated");
         fetchData();
       } else {
-        alert("Failed to duplicate newsletter");
+        showError("Failed to duplicate newsletter", "Duplicate Failed");
       }
     } catch (e) {
       console.error(e);
@@ -600,9 +604,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
         setShowRenameModal(false);
         setRenameProjectId(null);
         setRenameValue('');
+        showSuccess("Newsletter renamed successfully!", "Renamed");
         fetchData();
       } else {
-        alert("Failed to rename project");
+        showError("Failed to rename project", "Rename Failed");
       }
     } catch (e) {
       console.error(e);
@@ -890,14 +895,14 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
       if (genRes.ok) {
         const created = await genRes.json();
         setShowRawContentModal(false);
-        alert(`Successfully populated ${extractedArticles.length} extracted content section(s) into the fixed CTRL+READ 8-page newsletter!`);
+        showSuccess(`Successfully populated ${extractedArticles.length} extracted content section(s) into the 8-page newsletter!`, "Newsletter Created");
         onEditProject(created.id);
       } else {
-        alert("Failed to generate newsletter from raw content.");
+        showError("Failed to generate newsletter from raw content.", "Generation Failed");
       }
     } catch (e) {
       console.error(e);
-      alert("Error populating newsletter.");
+      showError("Error populating newsletter.", "Generation Error");
     } finally {
       setIsPopulatingNewsletter(false);
     }
@@ -920,7 +925,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
         setShowRawContentModal(true);
       } catch (err) {
         console.error("PDF parsing error", err);
-        alert("Error parsing PDF file.");
+        showError("Error parsing PDF file.", "PDF Error");
       } finally {
         setSaving(false);
       }
@@ -967,7 +972,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
 
               if (response.ok) {
                 const created = await response.json();
-                alert("Project imported successfully!");
+                showSuccess("Project imported successfully!", "Project Imported");
                 onEditProject(created.id);
                 return;
               }
@@ -983,7 +988,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
         setShowRawContentModal(true);
       } catch (err) {
         console.error(err);
-        alert("Error parsing uploaded file.");
+        showError("Error parsing uploaded file.", "Upload Error");
       }
     };
     reader.readAsText(file);

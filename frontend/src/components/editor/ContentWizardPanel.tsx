@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
+import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
 import { detectAndFixCase } from '../../utils/textCase';
 
@@ -49,6 +50,7 @@ const formatToParagraph = (str: string): string => {
 
 const ContentWizardPanel: React.FC = () => {
   const { activeProject, activePageId, updateElement, loadProject, setActivePageId, saveProject, updatePageElements, addPage } = useEditor();
+  const { showSuccess, showError, showWarning } = useNotification();
   const [openSection, setOpenSection] = useState<string>('header');
   const [subMode, setSubMode] = useState<'form' | 'generator'>('generator');
 
@@ -628,7 +630,7 @@ const ContentWizardPanel: React.FC = () => {
     // Append uploaded photos cleanly below text (MAXIMUM 3 PHOTOS PER CONTENT ITEM)
     const validPhotos = (photos || []).slice(0, 3);
     if (photos && photos.length > 3) {
-      alert("Maximum 3 photos allowed for this content item. Placing top 3 photos into layout.");
+      showWarning("Maximum 3 photos allowed for this content item. Placing top 3 photos into layout.", "Photo Limit");
     }
 
     if (validPhotos && validPhotos.length > 0) {
@@ -687,7 +689,7 @@ const ContentWizardPanel: React.FC = () => {
     loadProject(updatedProject);
     await saveProject(updatedProject);
 
-    alert(`Successfully applied content and ${photos.length} photo(s) to Page ${pageNum}!`);
+    showSuccess(`Successfully applied content and ${photos.length} photo(s) to Page ${pageNum}!`, "Page Updated");
 
     // Advance smoothly to next page forward
     if (pageIndex < activeProject.pages.length - 1) {
@@ -1102,7 +1104,7 @@ const ContentWizardPanel: React.FC = () => {
       // Check if file is an image file uploaded into document text parser
       const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|gif|bmp|webp)$/i.test(file.name);
       if (isImage) {
-        alert("⚠️ Notice: Image files cannot be parsed as text documents. Please upload a PDF, Word DOCX, or TXT file to parse circular text.");
+        showWarning("Image files cannot be parsed as text documents. Please upload a PDF, Word DOCX, or TXT file to parse circular text.", "Document Upload");
         e.target.value = '';
         return;
       }
@@ -1176,13 +1178,13 @@ const ContentWizardPanel: React.FC = () => {
                 handleUpdatePageTitle(activePageNum - 1, data.title);
               }
 
-              alert(`✨ Smart Document Auto-Parser successfully extracted clean event data for Page ${activePageNum}!`);
+              showSuccess(`Smart Document Auto-Parser successfully extracted clean event data for Page ${activePageNum}!`, "Document Parsed");
             } else {
-              alert("Could not parse document text.");
+              showError("Could not parse document text.", "Parse Failed");
             }
           } catch (err) {
             console.error(err);
-            alert("Error parsing document.");
+            showError("Error parsing document.", "Parse Error");
           }
         }
       };
@@ -1193,7 +1195,7 @@ const ContentWizardPanel: React.FC = () => {
   // 2. AI Image Auto-Captioning & Smart Layout Balancer
   const handleAutoCaptionAndBalancePhotos = async () => {
     if (photos.length === 0) {
-      alert("Please upload at least 1 photo first.");
+      showWarning("Please upload at least 1 photo first.", "No Photos");
       return;
     }
 
@@ -1228,7 +1230,7 @@ const ContentWizardPanel: React.FC = () => {
     }
 
     setCaptions(newCaptions);
-    alert("✨ AI Auto-Captioning complete! Photo captions and dynamic layout balance applied.");
+    showSuccess("AI Auto-Captioning complete! Photo captions and dynamic layout balance applied.", "Auto-Caption Complete");
   };
 
   // 3. 1-Click Multi-Page Full Newsletter Generator Modal State & Handler
@@ -1238,7 +1240,7 @@ const ContentWizardPanel: React.FC = () => {
 
   const handleGenerateFullNewsletter = async () => {
     if (!fullGenNotes.trim()) {
-      alert("Please paste your event notes or monthly updates first.");
+      showWarning("Please paste your event notes or monthly updates first.", "Input Required");
       return;
     }
 
@@ -1265,14 +1267,14 @@ const ContentWizardPanel: React.FC = () => {
           await saveProject(updatedProject);
           setShowFullGenModal(false);
           setFullGenNotes("");
-          alert("🚀 1-Click Full Newsletter Generator created all pages successfully!");
+          showSuccess("1-Click Full Newsletter Generator created all pages successfully!", "Newsletter Generated");
         }
       } else {
-        alert("Failed to generate full newsletter.");
+        showError("Failed to generate full newsletter.", "Generation Failed");
       }
     } catch (err) {
       console.error(err);
-      alert("Error generating full newsletter.");
+      showError("Error generating full newsletter.", "Generation Error");
     } finally {
       setIsGeneratingFull(false);
     }
@@ -3064,7 +3066,7 @@ const ContentWizardPanel: React.FC = () => {
                             const targetPage = activeProject.pages[pageIndex];
                             if (targetPage) {
                               updatePageElements(targetPage.id, [...targetPage.elements, newImageEl]);
-                              alert(`Photo added to Page ${activePageNum}!`);
+                              showSuccess(`Photo added to Page ${activePageNum}!`, "Photo Added");
                             }
                           }}
                           className="px-2 py-1 bg-primary text-white hover:bg-primary-dark rounded text-[9px] font-bold transition-colors flex-shrink-0"

@@ -1,6 +1,7 @@
 import { useState, useEffect, Component, ErrorInfo, ReactNode } from 'react';
 import { Sun, Moon } from 'lucide-react';
 import { EditorProvider } from './context/EditorContext';
+import { NotificationProvider } from './context/NotificationContext';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import EditorWorkspace from './components/EditorWorkspace';
@@ -361,7 +362,11 @@ function App() {
     }
   };
 
-  return <div className="h-full select-none">{renderContent()}</div>;
+  return (
+    <NotificationProvider>
+      <div className="h-full select-none">{renderContent()}</div>
+    </NotificationProvider>
+  );
 }
 
 export default App;
