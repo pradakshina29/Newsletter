@@ -866,6 +866,20 @@ public class AiController {
             extractedPerson = personMatcher.group(0);
         }
 
+        // Extract Team, Members, Class, Student Names using NewsletterGeneratorService
+        String extractedTeamName = newsletterGeneratorService != null ? newsletterGeneratorService.extractTeamName(text) : "";
+        String extractedMembers = newsletterGeneratorService != null ? newsletterGeneratorService.extractMembers(text) : "";
+        String extractedClassName = newsletterGeneratorService != null ? newsletterGeneratorService.extractClassName(text) : "";
+        String extractedStudentName = newsletterGeneratorService != null ? newsletterGeneratorService.extractStudentName(text) : "";
+
+        if (extractedPerson.isEmpty()) {
+            if (!extractedStudentName.isEmpty()) {
+                extractedPerson = extractedStudentName;
+            } else if (!extractedMembers.isEmpty()) {
+                extractedPerson = extractedMembers;
+            }
+        }
+
         // Extract Highlights: summary of text
         String extractedHighlights = cleanValue(text.length() > 350 ? text.substring(0, 350) + "..." : text);
 
@@ -874,6 +888,10 @@ public class AiController {
         result.put("title", extractedTitle);
         result.put("date", extractedDate);
         result.put("person", extractedPerson);
+        result.put("teamName", extractedTeamName);
+        result.put("members", extractedMembers);
+        result.put("className", extractedClassName);
+        result.put("studentName", extractedStudentName);
         result.put("highlights", extractedHighlights);
         result.put("rawText", text);
 
@@ -883,6 +901,9 @@ public class AiController {
         req.put("event", extractedTitle);
         req.put("date", extractedDate);
         req.put("resourcePerson", extractedPerson);
+        req.put("teamName", extractedTeamName);
+        req.put("members", extractedMembers);
+        req.put("className", extractedClassName);
         req.put("keywords", extractedHighlights);
         
         ResponseEntity<?> artResp = generateNewsArticle(req);

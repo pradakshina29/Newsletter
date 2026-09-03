@@ -3,6 +3,7 @@ import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
 import { detectAndFixCase } from '../../utils/textCase';
+import { extractTextFromDocument } from '../../utils/documentParser';
 
 
 interface AccordionSectionProps {
@@ -1109,86 +1110,88 @@ const ContentWizardPanel: React.FC = () => {
         return;
       }
 
-      const reader = new FileReader();
-      reader.onload = async (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          const rawTextContent = uploadEvent.target.result as string;
-          const textContent = cleanParsedText(rawTextContent);
-          
-          try {
-            const token = localStorage.getItem('token');
-            const response = await fetch('/api/ai/parse-document', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
-              body: JSON.stringify({ text: textContent })
-            });
+      try {
+        const rawTextContent = await extractTextFromDocument(file);
+        const textContent = cleanParsedText(rawTextContent);
+        
+        const token = localStorage.getItem('token');
+        const response = await fetch('/api/ai/parse-document', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ text: textContent || file.name.replace(/\.[^/.]+$/, "") })
+        });
 
-            if (response.ok) {
-              const rawData = await response.json();
-              const data = {
-                category: rawData.category || 'student',
-                title: cleanParsedText(rawData.title || ''),
-                person: cleanParsedText(rawData.person || ''),
-                date: cleanParsedText(rawData.date || ''),
-                highlights: cleanParsedText(rawData.highlights || ''),
-                article: cleanParsedText(rawData.article || '')
-              };
+        if (response.ok) {
+          const rawData = await response.json();
+          const data = {
+            category: rawData.category || 'student',
+            title: cleanParsedText(rawData.title || file.name.replace(/\.[^/.]+$/, "")),
+            teamName: cleanParsedText(rawData.teamName || ''),
+            members: cleanParsedText(rawData.members || ''),
+            className: cleanParsedText(rawData.className || ''),
+            studentName: cleanParsedText(rawData.studentName || rawData.person || ''),
+            person: cleanParsedText(rawData.person || ''),
+            date: cleanParsedText(rawData.date || 'June 2026'),
+            highlights: cleanParsedText(rawData.highlights || textContent.substring(0, 300)),
+            article: cleanParsedText(rawData.article || '')
+          };
 
-              const cat = data.category || 'student';
-              setPageCategories(prev => ({ ...prev, [activePageNum]: cat }));
+          const cat = data.category || 'student';
+          setPageCategories(prev => ({ ...prev, [activePageNum]: cat }));
 
-              if (cat === 'student') {
-                updateStudentForm(activePageNum, 'title', data.title);
-                updateStudentForm(activePageNum, 'student', data.person);
-                updateStudentForm(activePageNum, 'award', data.title);
-                updateStudentForm(activePageNum, 'details', data.highlights);
-              } else if (cat === 'faculty') {
-                updateFacultyForm(activePageNum, 'paper', data.title);
-                updateFacultyForm(activePageNum, 'faculty', data.person);
-                updateFacultyForm(activePageNum, 'date', data.date);
-                updateFacultyForm(activePageNum, 'contribution', data.highlights);
-              } else if (cat === 'placement') {
-                updatePlacementForm(activePageNum, 'company', data.title);
-                updatePlacementForm(activePageNum, 'domain', data.person);
-                updatePlacementForm(activePageNum, 'highlights', data.highlights);
-              } else if (cat === 'workshop') {
-                updateWorkshopForm(activePageNum, 'title', data.title);
-                updateWorkshopForm(activePageNum, 'speaker', data.person);
-                updateWorkshopForm(activePageNum, 'date', data.date);
-                updateWorkshopForm(activePageNum, 'topics', data.highlights);
-              } else if (cat === 'welcome') {
-                updateWelcomeForm(activePageNum, 'title', data.title);
-                updateWelcomeForm(activePageNum, 'guest', data.person);
-                updateWelcomeForm(activePageNum, 'date', data.date);
-                updateWelcomeForm(activePageNum, 'highlights', data.highlights);
-              } else {
-                updateCustomForm(activePageNum, 'title', data.title);
-                updateCustomForm(activePageNum, 'person', data.person);
-                updateCustomForm(activePageNum, 'details', data.highlights);
-              }
-
-              if (data.article) {
-                setGeneratedArticle(data.article);
-              }
-
-              if (data.title) {
-                handleUpdatePageTitle(activePageNum - 1, data.title);
-              }
-
-              showSuccess(`Smart Document Auto-Parser successfully extracted clean event data for Page ${activePageNum}!`, "Document Parsed");
-            } else {
-              showError("Could not parse document text.", "Parse Failed");
-            }
-          } catch (err) {
-            console.error(err);
-            showError("Error parsing document.", "Parse Error");
+          if (cat === 'student') {
+            updateStudentForm(activePageNum, 'title', data.title);
+            if (data.teamName) updateStudentForm(activePageNum, 'teamName', data.teamName);
+            updateStudentForm(activePageNum, 'student', data.studentName || data.members || data.person);
+            if (data.className) updateStudentForm(activePageNum, 'classDept', data.className);
+            updateStudentForm(activePageNum, 'award', data.title);
+            updateStudentForm(activePageNum, 'details', data.highlights);
+          } else if (cat === 'faculty') {
+            updateFacultyForm(activePageNum, 'paper', data.title);
+            updateFacultyForm(activePageNum, 'faculty', data.person);
+            updateFacultyForm(activePageNum, 'date', data.date);
+            updateFacultyForm(activePageNum, 'contribution', data.highlights);
+          } else if (cat === 'placement') {
+            updatePlacementForm(activePageNum, 'company', data.title);
+            updatePlacementForm(activePageNum, 'domain', data.person);
+            updatePlacementForm(activePageNum, 'highlights', data.highlights);
+          } else if (cat === 'workshop') {
+            updateWorkshopForm(activePageNum, 'title', data.title);
+            updateWorkshopForm(activePageNum, 'speaker', data.person);
+            updateWorkshopForm(activePageNum, 'date', data.date);
+            updateWorkshopForm(activePageNum, 'topics', data.highlights);
+          } else if (cat === 'welcome') {
+            updateWelcomeForm(activePageNum, 'title', data.title);
+            updateWelcomeForm(activePageNum, 'guest', data.person);
+            updateWelcomeForm(activePageNum, 'date', data.date);
+            updateWelcomeForm(activePageNum, 'highlights', data.highlights);
+          } else {
+            updateCustomForm(activePageNum, 'title', data.title);
+            updateCustomForm(activePageNum, 'person', data.person);
+            updateCustomForm(activePageNum, 'details', data.highlights);
           }
+
+          if (data.article) {
+            setGeneratedArticle(data.article);
+          }
+
+          if (data.title) {
+            handleUpdatePageTitle(activePageNum - 1, data.title);
+          }
+
+          showSuccess(`Smart Document Auto-Parser successfully extracted clean event data for Page ${activePageNum}!`, "Document Parsed");
+        } else {
+          showError("Could not parse document text.", "Parse Failed");
         }
-      };
-      reader.readAsText(file);
+      } catch (err) {
+        console.error(err);
+        showError("Error parsing document.", "Parse Error");
+      } finally {
+        e.target.value = '';
+      }
     }
   };
 
