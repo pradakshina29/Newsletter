@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
+import { extractTextFromDocument, parseReportEntities, ParsedReportData } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
-import { extractTextFromDocument } from '../../utils/documentParser';
 
 
 interface AccordionSectionProps {
@@ -62,6 +62,10 @@ const ContentWizardPanel: React.FC = () => {
   const [generatedArticle, setGeneratedArticle] = useState<string>("");
   const [isGeneratingArticle, setIsGeneratingArticle] = useState<boolean>(false);
   const [selectedTone, setSelectedTone] = useState<string>("encouraging");
+
+  // Report Upload Confirmation Modal State
+  const [reportConfirmData, setReportConfirmData] = useState<(ParsedReportData & { targetPageNum: number; photos: string[] }) | null>(null);
+  const [isApplyingReport, setIsApplyingReport] = useState<boolean>(false);
 
   // Per-page dynamic form values
   const [studentForms, setStudentForms] = useState<{ [pageNum: number]: { title: string; teamName: string; student: string; classDept: string; award: string; host: string; details: string; keywords: string } }>({});
@@ -1112,86 +1116,268 @@ const ContentWizardPanel: React.FC = () => {
 
       try {
         const rawTextContent = await extractTextFromDocument(file);
-        const textContent = cleanParsedText(rawTextContent);
+        const dept = activeProject?.department || "Information Technology";
         
-        const token = localStorage.getItem('token');
-        const response = await fetch('/api/ai/parse-document', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ text: textContent || file.name.replace(/\.[^/.]+$/, "") })
+        // 1. Smart baseline entities extraction
+        let parsed = parseReportEntities(rawTextContent, file.name, dept);
+
+        // 2. Try server AI enrichment if online
+        try {
+          const token = localStorage.getItem('token');
+          const response = await fetch('/api/ai/parse-document', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ text: rawTextContent || file.name.replace(/\.[^/.]+$/, "") })
+          });
+
+          if (response.ok) {
+            const rawData = await response.json();
+            if (rawData.title) parsed.title = cleanParsedText(rawData.title);
+            if (rawData.category) parsed.category = rawData.category;
+            if (rawData.teamName) parsed.teamName = cleanParsedText(rawData.teamName);
+            if (rawData.studentName || rawData.members || rawData.person) {
+              parsed.student = cleanParsedText(rawData.studentName || rawData.members || rawData.person);
+            }
+            if (rawData.className) parsed.classDept = cleanParsedText(rawData.className);
+            if (rawData.date) parsed.date = cleanParsedText(rawData.date);
+            if (rawData.highlights) parsed.details = cleanParsedText(rawData.highlights);
+            if (rawData.article) parsed.article = cleanParsedText(rawData.article);
+          }
+        } catch (apiErr) {
+          console.warn("AI server enhancement skipped, using offline smart parsing:", apiErr);
+        }
+
+        // 3. Open Report Confirmation & Review Modal
+        setReportConfirmData({
+          ...parsed,
+          targetPageNum: activePageNum,
+          photos: photos || []
         });
 
-        if (response.ok) {
-          const rawData = await response.json();
-          const data = {
-            category: rawData.category || 'student',
-            title: cleanParsedText(rawData.title || file.name.replace(/\.[^/.]+$/, "")),
-            teamName: cleanParsedText(rawData.teamName || ''),
-            members: cleanParsedText(rawData.members || ''),
-            className: cleanParsedText(rawData.className || ''),
-            studentName: cleanParsedText(rawData.studentName || rawData.person || ''),
-            person: cleanParsedText(rawData.person || ''),
-            date: cleanParsedText(rawData.date || 'June 2026'),
-            highlights: cleanParsedText(rawData.highlights || textContent.substring(0, 300)),
-            article: cleanParsedText(rawData.article || '')
-          };
-
-          const cat = data.category || 'student';
-          setPageCategories(prev => ({ ...prev, [activePageNum]: cat }));
-
-          if (cat === 'student') {
-            updateStudentForm(activePageNum, 'title', data.title);
-            if (data.teamName) updateStudentForm(activePageNum, 'teamName', data.teamName);
-            updateStudentForm(activePageNum, 'student', data.studentName || data.members || data.person);
-            if (data.className) updateStudentForm(activePageNum, 'classDept', data.className);
-            updateStudentForm(activePageNum, 'award', data.title);
-            updateStudentForm(activePageNum, 'details', data.highlights);
-          } else if (cat === 'faculty') {
-            updateFacultyForm(activePageNum, 'paper', data.title);
-            updateFacultyForm(activePageNum, 'faculty', data.person);
-            updateFacultyForm(activePageNum, 'date', data.date);
-            updateFacultyForm(activePageNum, 'contribution', data.highlights);
-          } else if (cat === 'placement') {
-            updatePlacementForm(activePageNum, 'company', data.title);
-            updatePlacementForm(activePageNum, 'domain', data.person);
-            updatePlacementForm(activePageNum, 'highlights', data.highlights);
-          } else if (cat === 'workshop') {
-            updateWorkshopForm(activePageNum, 'title', data.title);
-            updateWorkshopForm(activePageNum, 'speaker', data.person);
-            updateWorkshopForm(activePageNum, 'date', data.date);
-            updateWorkshopForm(activePageNum, 'topics', data.highlights);
-          } else if (cat === 'welcome') {
-            updateWelcomeForm(activePageNum, 'title', data.title);
-            updateWelcomeForm(activePageNum, 'guest', data.person);
-            updateWelcomeForm(activePageNum, 'date', data.date);
-            updateWelcomeForm(activePageNum, 'highlights', data.highlights);
-          } else {
-            updateCustomForm(activePageNum, 'title', data.title);
-            updateCustomForm(activePageNum, 'person', data.person);
-            updateCustomForm(activePageNum, 'details', data.highlights);
-          }
-
-          if (data.article) {
-            setGeneratedArticle(data.article);
-          }
-
-          if (data.title) {
-            handleUpdatePageTitle(activePageNum - 1, data.title);
-          }
-
-          showSuccess(`Smart Document Auto-Parser successfully extracted clean event data for Page ${activePageNum}!`, "Document Parsed");
-        } else {
-          showError("Could not parse document text.", "Parse Failed");
-        }
+        showSuccess(`Report extracted successfully! Review and confirm content to apply to Page ${activePageNum}.`, "Report Extracted");
       } catch (err) {
         console.error(err);
-        showError("Error parsing document.", "Parse Error");
+        showError("Error extracting document text.", "Parse Error");
       } finally {
         e.target.value = '';
       }
+    }
+  };
+
+  // Handler to Confirm and Apply Report to Target Page Canvas
+  const handleConfirmAndApplyReport = async () => {
+    if (!reportConfirmData || !activeProject) return;
+
+    setIsApplyingReport(true);
+    try {
+      const targetPageNum = reportConfirmData.targetPageNum || activePageNum;
+      const targetIndex = targetPageNum - 1;
+      const targetPage = activeProject.pages[targetIndex] || activeProject.pages[0];
+      if (!targetPage) return;
+
+      const cat = reportConfirmData.category || 'student';
+      setPageCategories(prev => ({ ...prev, [targetPageNum]: cat }));
+
+      // Save form fields
+      if (cat === 'student') {
+        updateStudentForm(targetPageNum, 'title', reportConfirmData.title);
+        updateStudentForm(targetPageNum, 'teamName', reportConfirmData.teamName);
+        updateStudentForm(targetPageNum, 'student', reportConfirmData.student);
+        updateStudentForm(targetPageNum, 'classDept', reportConfirmData.classDept);
+        updateStudentForm(targetPageNum, 'award', reportConfirmData.award || reportConfirmData.title);
+        updateStudentForm(targetPageNum, 'host', reportConfirmData.host);
+        updateStudentForm(targetPageNum, 'details', reportConfirmData.details);
+        updateStudentForm(targetPageNum, 'keywords', reportConfirmData.keywords);
+      } else if (cat === 'faculty') {
+        updateFacultyForm(targetPageNum, 'paper', reportConfirmData.title);
+        updateFacultyForm(targetPageNum, 'faculty', reportConfirmData.student);
+        updateFacultyForm(targetPageNum, 'date', reportConfirmData.date);
+        updateFacultyForm(targetPageNum, 'contribution', reportConfirmData.details);
+      } else if (cat === 'placement') {
+        updatePlacementForm(targetPageNum, 'company', reportConfirmData.title);
+        updatePlacementForm(targetPageNum, 'domain', reportConfirmData.student);
+        updatePlacementForm(targetPageNum, 'highlights', reportConfirmData.details);
+      } else if (cat === 'workshop') {
+        updateWorkshopForm(targetPageNum, 'title', reportConfirmData.title);
+        updateWorkshopForm(targetPageNum, 'speaker', reportConfirmData.student);
+        updateWorkshopForm(targetPageNum, 'date', reportConfirmData.date);
+        updateWorkshopForm(targetPageNum, 'topics', reportConfirmData.details);
+      } else {
+        updateCustomForm(targetPageNum, 'title', reportConfirmData.title);
+        updateCustomForm(targetPageNum, 'person', reportConfirmData.student);
+        updateCustomForm(targetPageNum, 'details', reportConfirmData.details);
+      }
+
+      setGeneratedArticle(reportConfirmData.article);
+      handleUpdatePageTitle(targetIndex, reportConfirmData.title);
+
+      // Build Canvas Elements for the target page
+      let updatedElements = (targetPage.elements || []).filter(el => 
+        el.id.includes('header') || el.id.includes('footer') || el.id.includes('pnum') || el.id.includes('mast') || el.id.includes('logo') || el.id.includes('dept')
+      );
+
+      // 1. Article Title Banner
+      updatedElements.push({
+        id: `p${targetPageNum}_title_${Date.now()}`,
+        type: 'text',
+        x: 50,
+        y: 80,
+        width: 700,
+        height: 48,
+        text: detectAndFixCase(reportConfirmData.title, 'title'),
+        fontSize: 22,
+        fontFamily: 'Montserrat',
+        bold: true,
+        italic: false,
+        underline: false,
+        lineHeight: 1.3,
+        letterSpacing: 0,
+        color: '#0F172A',
+        align: 'center',
+        rotation: 0,
+        opacity: 100
+      });
+
+      // 2. Subtitle Banner (Team Name / Achievers / Class)
+      const subParts = [
+        reportConfirmData.teamName ? `Team: ${detectAndFixCase(reportConfirmData.teamName, 'title')}` : '',
+        reportConfirmData.student ? `Achievers: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
+        reportConfirmData.classDept ? detectAndFixCase(reportConfirmData.classDept, 'upper') : ''
+      ].filter(Boolean);
+
+      if (subParts.length > 0) {
+        updatedElements.push({
+          id: `p${targetPageNum}_sub_${Date.now()}`,
+          type: 'text',
+          x: 50,
+          y: 132,
+          width: 700,
+          height: 28,
+          text: subParts.join(' | '),
+          fontSize: 11,
+          fontFamily: 'Roboto',
+          bold: true,
+          italic: false,
+          underline: false,
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          color: '#1E40AF',
+          align: 'center',
+          rotation: 0,
+          opacity: 100
+        });
+      }
+
+      // 3. Body Narrative Text Columns
+      const words = (reportConfirmData.article || '').split(' ');
+      const mid = Math.ceil(words.length / 2);
+      const col1 = words.slice(0, mid).join(' ');
+      const col2 = words.slice(mid).join(' ');
+
+      const hasPhotos = (reportConfirmData.photos || []).length > 0;
+      const textHeight = hasPhotos ? 320 : 700;
+
+      updatedElements.push({
+        id: `p${targetPageNum}_body_left_${Date.now()}`,
+        type: 'text',
+        x: 50,
+        y: 170,
+        width: 335,
+        height: textHeight,
+        text: col1,
+        fontSize: 10.5,
+        fontFamily: 'Georgia',
+        bold: false,
+        italic: false,
+        underline: false,
+        lineHeight: 1.4,
+        letterSpacing: 0,
+        color: '#334155',
+        align: 'left',
+        rotation: 0,
+        opacity: 100
+      });
+
+      if (col2.trim()) {
+        updatedElements.push({
+          id: `p${targetPageNum}_body_right_${Date.now()}`,
+          type: 'text',
+          x: 415,
+          y: 170,
+          width: 335,
+          height: textHeight,
+          text: col2,
+          fontSize: 10.5,
+          fontFamily: 'Georgia',
+          bold: false,
+          italic: false,
+          underline: false,
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          color: '#334155',
+          align: 'left',
+          rotation: 0,
+          opacity: 100
+        });
+      }
+
+      // 4. Photos
+      const validPhotos = (reportConfirmData.photos || []).slice(0, 3);
+      validPhotos.forEach((photoUrl, idx) => {
+        let x = 50;
+        let y = 510;
+        let width = 700;
+        let height = 360;
+
+        if (validPhotos.length === 1) {
+          x = 80; y = 510; width = 640; height = 360;
+        } else if (validPhotos.length === 2) {
+          x = idx === 0 ? 50 : 415; y = 510; width = 335; height = 340;
+        } else if (validPhotos.length === 3) {
+          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 510; width = 220; height = 320;
+        }
+
+        updatedElements.push({
+          id: `p${targetPageNum}_img_${idx + 1}_${Date.now()}`,
+          type: 'image',
+          x,
+          y,
+          width,
+          height,
+          url: photoUrl,
+          borderRadius: 12,
+          shadow: 'md',
+          rotation: 0,
+          opacity: 100
+        });
+      });
+
+      const updatedPages = [...activeProject.pages];
+      updatedPages[targetIndex] = {
+        ...targetPage,
+        title: reportConfirmData.title,
+        elements: updatedElements
+      };
+
+      const updatedProject = {
+        ...activeProject,
+        pages: updatedPages
+      };
+
+      loadProject(updatedProject);
+      await saveProject(updatedProject);
+      setActivePageId(targetPage.id);
+
+      setReportConfirmData(null);
+      showSuccess(`Successfully generated and applied report to Page ${targetPageNum}!`, "Page Generated");
+    } catch (err) {
+      console.error(err);
+      showError("Error applying report to page.", "Application Error");
+    } finally {
+      setIsApplyingReport(false);
     }
   };
 
@@ -3268,6 +3454,236 @@ const ContentWizardPanel: React.FC = () => {
                   <>
                     <Sparkles className="w-4 h-4" />
                     <span>Generate Full Newsletter (All Pages)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal for Report Content Review & Page Generation Confirmation */}
+      {reportConfirmData && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 select-text">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl max-w-2xl w-full p-6 shadow-2xl space-y-5 animate-in fade-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center pb-3 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 bg-emerald-500/10 rounded-2xl text-emerald-600 dark:text-emerald-400">
+                  <FileText className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">
+                    📄 Confirm Report & Apply to Newsletter Page
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Review extracted report details below and confirm to generate the layout for Page {reportConfirmData.targetPageNum}.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReportConfirmData(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-white rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Target Page Selector & Content Type */}
+            <div className="grid grid-cols-2 gap-4 bg-slate-50 dark:bg-slate-950 p-4 rounded-2xl border border-slate-200 dark:border-slate-800">
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                  Apply To Newsletter Page *
+                </label>
+                <select
+                  value={reportConfirmData.targetPageNum}
+                  onChange={e => setReportConfirmData({ ...reportConfirmData, targetPageNum: Number(e.target.value) })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-indigo-600 dark:text-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                  {(activeProject?.pages || []).map((p, idx) => (
+                    <option key={p.id} value={idx + 1}>
+                      Page {idx + 1}: {p.title || `Page ${idx + 1}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                  Event Category *
+                </label>
+                <select
+                  value={reportConfirmData.category}
+                  onChange={e => setReportConfirmData({ ...reportConfirmData, category: e.target.value })}
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                >
+                  <option value="student">🎓 Student Achievements / Hackathon / Web App</option>
+                  <option value="faculty">🔬 Faculty Research Publication</option>
+                  <option value="placement">💼 Campus Placement Drive</option>
+                  <option value="workshop">🛠️ Hands-on Workshop / Seminar</option>
+                  <option value="welcome">🤝 Welcome / Orientation</option>
+                  <option value="custom">📄 General Academic Activity</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Editable Fields Grid */}
+            <div className="space-y-4">
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                  Event / Article Title *
+                </label>
+                <input
+                  type="text"
+                  value={reportConfirmData.title}
+                  onChange={e => setReportConfirmData({ ...reportConfirmData, title: e.target.value })}
+                  placeholder="e.g. SECURE ONLINE VOTING SYSTEM / HACKATHON WINNER"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                    Team Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reportConfirmData.teamName}
+                    onChange={e => setReportConfirmData({ ...reportConfirmData, teamName: e.target.value })}
+                    placeholder="e.g. Team Code Ninjas / Team Innovation"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                    Class & Department *
+                  </label>
+                  <input
+                    type="text"
+                    value={reportConfirmData.classDept}
+                    onChange={e => setReportConfirmData({ ...reportConfirmData, classDept: e.target.value })}
+                    placeholder="e.g. III B.SC IT 'B' / II BCA"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                  Student Achievers / Team Members / Resource Person *
+                </label>
+                <input
+                  type="text"
+                  value={reportConfirmData.student}
+                  onChange={e => setReportConfirmData({ ...reportConfirmData, student: e.target.value })}
+                  placeholder="e.g. Mr. Rahul S, Mr. Sathish G, Ms. Pradakshina S K"
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3.5 py-2.5 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                />
+              </div>
+
+              <div>
+                <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                  Generated Article Narrative (Will be rendered on Page {reportConfirmData.targetPageNum}) *
+                </label>
+                <textarea
+                  rows={6}
+                  value={reportConfirmData.article}
+                  onChange={e => setReportConfirmData({ ...reportConfirmData, article: e.target.value })}
+                  placeholder="Full article story..."
+                  className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl p-3.5 text-xs text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 leading-relaxed font-serif"
+                />
+              </div>
+
+              {/* Photos Attachment in Modal */}
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider">
+                    Event Photos (Max 3 Photos for this page)
+                  </label>
+                  <label className="text-[11px] font-bold text-indigo-600 hover:text-indigo-700 dark:text-indigo-400 cursor-pointer flex items-center space-x-1">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>+ Upload Photo</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={e => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          Array.from(e.target.files).slice(0, 3).forEach(file => {
+                            const reader = new FileReader();
+                            reader.onload = ev => {
+                              if (ev.target?.result) {
+                                setReportConfirmData(prev => prev ? {
+                                  ...prev,
+                                  photos: [...(prev.photos || []), ev.target?.result as string].slice(0, 3)
+                                } : null);
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          });
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {reportConfirmData.photos && reportConfirmData.photos.length > 0 ? (
+                  <div className="grid grid-cols-3 gap-3">
+                    {reportConfirmData.photos.map((pUrl, idx) => (
+                      <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 aspect-video bg-slate-100">
+                        <img src={pUrl} alt={`Photo ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReportConfirmData(prev => prev ? {
+                              ...prev,
+                              photos: prev.photos.filter((_, i) => i !== idx)
+                            } : null);
+                          }}
+                          className="absolute top-1 right-1 p-1 bg-rose-600 text-white rounded-lg opacity-80 hover:opacity-100 transition-opacity"
+                          title="Remove Photo"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-center text-xs text-slate-400">
+                    No photos attached. Click "+ Upload Photo" above or photos from the wizard panel will be used.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Actions */}
+            <div className="flex justify-end space-x-3 pt-4 border-t border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setReportConfirmData(null)}
+                className="px-5 py-2.5 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isApplyingReport}
+                onClick={handleConfirmAndApplyReport}
+                className="px-6 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center space-x-2"
+              >
+                {isApplyingReport ? (
+                  <>
+                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Applying to Page {reportConfirmData.targetPageNum}...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Confirm & Apply to Page {reportConfirmData.targetPageNum}</span>
                   </>
                 )}
               </button>

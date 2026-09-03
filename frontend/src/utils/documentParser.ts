@@ -9,6 +9,21 @@ try {
   console.warn("Could not set PDF worker URL:", e);
 }
 
+export interface ParsedReportData {
+  category: string;
+  title: string;
+  teamName: string;
+  student: string;
+  classDept: string;
+  date: string;
+  award: string;
+  host: string;
+  details: string;
+  keywords: string;
+  article: string;
+  rawText: string;
+}
+
 /**
  * Extract clean plain text from any uploaded document (PDF, DOCX, TXT, JSON, MD)
  */
@@ -90,7 +105,6 @@ export async function extractTextFromDocument(file: File): Promise<string> {
   try {
     const text = await file.text();
     if (text && text.trim().length > 0) {
-      // If file is JSON, try to format or stringify cleanly
       if (fileName.endsWith('.json')) {
         try {
           const parsed = JSON.parse(text);
@@ -107,4 +121,112 @@ export async function extractTextFromDocument(file: File): Promise<string> {
 
   // 4. Default Fallback
   return `Event Report: ${file.name.replace(/\.[^/.]+$/, "")}`;
+}
+
+/**
+ * Parses raw extracted text into structured entities (Title, Team Name, Members, Class, Date, Article)
+ */
+export function parseReportEntities(rawText: string, fileName: string, defaultDepartment: string = "Information Technology"): ParsedReportData {
+  const cleanName = fileName.replace(/\.[^/.]+$/, "").replace(/[_\-+]/g, ' ').trim();
+  const text = (rawText || cleanName).replace(/\s+/g, ' ').trim();
+  const lower = text.toLowerCase();
+
+  // Detect Category
+  let category = "student";
+  if (lower.includes("faculty") || lower.includes("paper") || lower.includes("journal") || lower.includes("publication") || lower.includes("research")) {
+    category = "faculty";
+  } else if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("offer")) {
+    category = "placement";
+  } else if (lower.includes("workshop") || lower.includes("seminar") || lower.includes("speaker") || lower.includes("guest lecture") || lower.includes("webinar") || lower.includes("training")) {
+    category = "workshop";
+  } else if (lower.includes("welcome") || lower.includes("orientation") || lower.includes("induction") || lower.includes("fresher")) {
+    category = "welcome";
+  }
+
+  // Extract Team Name
+  let teamName = "";
+  const teamMatch = text.match(/(?:team name:?|team:?|team name is)\s*([^.,;\n]{2,50})/i);
+  if (teamMatch) {
+    teamName = teamMatch[1].trim().replace(/^["']|["']$/g, '');
+  }
+
+  // Extract Members / Student Names
+  let student = "";
+  const memberMatch = text.match(/(?:members?:?|team members?:?|members name:?|students?:?|student name:?|developers?:?|achievers?:?)\s*([^;\n.]{3,120})/i);
+  if (memberMatch) {
+    student = memberMatch[1].trim().replace(/^["']|["']$/g, '');
+  }
+
+  // Extract Class & Department
+  let classDept = "";
+  const classMatch = text.match(/(?:class:?|class\/dept:?|section:?|batch:?|year:?)\s*([^;\n.]{2,40})/i);
+  if (classMatch) {
+    classDept = classMatch[1].trim();
+  } else {
+    classDept = `III B.SC ${defaultDepartment.toUpperCase()}`;
+  }
+
+  // Extract Date
+  let date = "June 2026";
+  const dateMatch = text.match(/\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i) ||
+                    text.match(/\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/i);
+  if (dateMatch) {
+    date = dateMatch[0].trim();
+  }
+
+  // Extract Event Title
+  let title = cleanName;
+  const titleMatch = text.match(/(?:title:?|event:?|topic:?|project:?|paper:?)\s*([^.,;\n]{4,80})/i);
+  if (titleMatch) {
+    title = titleMatch[1].trim().replace(/^["']|["']$/g, '');
+  } else {
+    // Take first capitalized phrase or filename
+    const firstLines = text.split(/[.\n]/).map(s => s.trim()).filter(s => s.length > 5 && s.length < 80);
+    if (firstLines.length > 0) {
+      title = firstLines[0];
+    }
+  }
+
+  // Clean Title
+  title = title.toUpperCase();
+
+  // Extract Award / Purpose
+  let award = `School-Level Department Academic Event`;
+  if (lower.includes("hackathon")) award = "National Hackathon Initiative & Project Innovation";
+  else if (lower.includes("election") || lower.includes("office bearer")) award = "Department Association Office Bearer Selection";
+  else if (lower.includes("workshop")) award = "Hands-on Technical Training & Skill Workshop";
+  else if (lower.includes("placement")) award = "Campus Recruitment Placement Drive";
+
+  const host = "Respected Principal Dr. P. Geetha, Deans of various schools, and Heads of Departments";
+  const details = text.length > 300 ? text.substring(0, 300) + "..." : text;
+  const keywords = "Executive presentation, student deployment, leadership appreciation, live demonstration";
+
+  // Synthesize Complete News Article
+  const sentences: string[] = [
+    `The Department of ${defaultDepartment} organized the academic initiative titled "${title}" hosted at KPRCAS campus.`,
+    teamName ? `The project was engineered and presented by Team "${teamName}" from ${classDept}.` : '',
+    student ? `The student delegation (${student}), actively representing ${classDept}, demonstrated commendable technical expertise and high enthusiasm.` : '',
+    `During the main program session, the participants delivered an executive presentation before ${host}, demonstrating system architecture and live workflow.`,
+    `Key session highlights included technical design reviews, practical feature demonstrations, and interactive validation.`,
+    `The institutional leadership team expressed immense appreciation for the students' problem-solving mindset, practical execution, and dedicated teamwork.`,
+    details ? `Key focus areas and event updates: ${details}` : '',
+    `The department warmly congratulates all contributors on their active participation, exemplary dedication, and outstanding academic initiative!`
+  ].filter(Boolean);
+
+  const article = sentences.join(' ');
+
+  return {
+    category,
+    title,
+    teamName,
+    student: student || "Student Delegation",
+    classDept,
+    date,
+    award,
+    host,
+    details,
+    keywords,
+    article,
+    rawText: text
+  };
 }
