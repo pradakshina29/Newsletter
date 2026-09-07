@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
-import { extractTextFromDocument, parseReportEntities, ParsedReportData } from '../../utils/documentParser';
+import { extractDocumentContent, parseReportEntities, ParsedReportData } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
 
 
@@ -1101,7 +1101,7 @@ const ContentWizardPanel: React.FC = () => {
       .trim();
   };
 
-  // 1. Smart Document / Circular Auto-Parser
+  // 1. Smart Document / Circular Auto-Parser with Image Extraction
   const handleParseUploadedDocument = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
@@ -1115,11 +1115,11 @@ const ContentWizardPanel: React.FC = () => {
       }
 
       try {
-        const rawTextContent = await extractTextFromDocument(file);
+        const extracted = await extractDocumentContent(file);
         const dept = activeProject?.department || "Information Technology";
         
-        // 1. Smart baseline entities extraction
-        let parsed = parseReportEntities(rawTextContent, file.name, dept);
+        // 1. Smart baseline entities extraction tailored for KPRCAS Event Reports
+        let parsed = parseReportEntities(extracted.text, file.name, dept);
 
         // 2. Try server AI enrichment if online
         try {
@@ -1130,19 +1130,21 @@ const ContentWizardPanel: React.FC = () => {
               'Content-Type': 'application/json',
               'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ text: rawTextContent || file.name.replace(/\.[^/.]+$/, "") })
+            body: JSON.stringify({ text: extracted.text || file.name.replace(/\.[^/.]+$/, "") })
           });
 
           if (response.ok) {
             const rawData = await response.json();
-            if (rawData.title) parsed.title = cleanParsedText(rawData.title);
+            if (rawData.title && !rawData.title.includes("VERSION") && !rawData.title.includes("IQAC")) {
+              parsed.title = cleanParsedText(rawData.title);
+            }
             if (rawData.category) parsed.category = rawData.category;
             if (rawData.teamName) parsed.teamName = cleanParsedText(rawData.teamName);
             if (rawData.studentName || rawData.members || rawData.person) {
               parsed.student = cleanParsedText(rawData.studentName || rawData.members || rawData.person);
             }
             if (rawData.className) parsed.classDept = cleanParsedText(rawData.className);
-            if (rawData.date) parsed.date = cleanParsedText(rawData.date);
+            if (rawData.date && !rawData.date.includes("18/02/2022")) parsed.date = cleanParsedText(rawData.date);
             if (rawData.highlights) parsed.details = cleanParsedText(rawData.highlights);
             if (rawData.article) parsed.article = cleanParsedText(rawData.article);
           }
@@ -1150,14 +1152,19 @@ const ContentWizardPanel: React.FC = () => {
           console.warn("AI server enhancement skipped, using offline smart parsing:", apiErr);
         }
 
-        // 3. Open Report Confirmation & Review Modal
+        const reportPhotos = extracted.images && extracted.images.length > 0 ? extracted.images : (photos || []);
+        if (reportPhotos.length > 0) {
+          setPhotos(reportPhotos);
+        }
+
+        // 3. Open Report Confirmation & Review Modal with extracted text + photos
         setReportConfirmData({
           ...parsed,
           targetPageNum: activePageNum,
-          photos: photos || []
+          photos: reportPhotos
         });
 
-        showSuccess(`Report extracted successfully! Review and confirm content to apply to Page ${activePageNum}.`, "Report Extracted");
+        showSuccess(`Report and photos extracted successfully! Review and confirm content to apply to Page ${activePageNum}.`, "Report Extracted");
       } catch (err) {
         console.error(err);
         showError("Error extracting document text.", "Parse Error");
@@ -1167,7 +1174,7 @@ const ContentWizardPanel: React.FC = () => {
     }
   };
 
-  // Handler to Confirm and Apply Report to Target Page Canvas
+  // Handler to Confirm and Apply Report to Target Page Canvas (with clean alignment & photos)
   const handleConfirmAndApplyReport = async () => {
     if (!reportConfirmData || !activeProject) return;
 
@@ -1214,38 +1221,38 @@ const ContentWizardPanel: React.FC = () => {
       setGeneratedArticle(reportConfirmData.article);
       handleUpdatePageTitle(targetIndex, reportConfirmData.title);
 
-      // Build Canvas Elements for the target page
+      // Preserve permanent header & footer canvas elements
       let updatedElements = (targetPage.elements || []).filter(el => 
         el.id.includes('header') || el.id.includes('footer') || el.id.includes('pnum') || el.id.includes('mast') || el.id.includes('logo') || el.id.includes('dept')
       );
 
-      // 1. Article Title Banner
+      // 1. Article Title Banner (Positioned cleanly at y: 220 in safe area)
       updatedElements.push({
         id: `p${targetPageNum}_title_${Date.now()}`,
         type: 'text',
         x: 50,
-        y: 80,
+        y: 220,
         width: 700,
-        height: 48,
+        height: 38,
         text: detectAndFixCase(reportConfirmData.title, 'title'),
-        fontSize: 22,
-        fontFamily: 'Montserrat',
+        fontSize: 18,
+        fontFamily: 'Poppins',
         bold: true,
         italic: false,
         underline: false,
         lineHeight: 1.3,
         letterSpacing: 0,
-        color: '#0F172A',
+        color: '#1E40AF',
         align: 'center',
         rotation: 0,
         opacity: 100
       });
 
-      // 2. Subtitle Banner (Team Name / Achievers / Class)
+      // 2. Subtitle / Resource Person & Event Date Banner (y: 260)
       const subParts = [
-        reportConfirmData.teamName ? `Team: ${detectAndFixCase(reportConfirmData.teamName, 'title')}` : '',
-        reportConfirmData.student ? `Achievers: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
-        reportConfirmData.classDept ? detectAndFixCase(reportConfirmData.classDept, 'upper') : ''
+        reportConfirmData.student ? `Resource Person: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
+        reportConfirmData.date ? `Date: ${reportConfirmData.date}` : '',
+        `Venue: Seminar Hall`
       ].filter(Boolean);
 
       if (subParts.length > 0) {
@@ -1253,47 +1260,66 @@ const ContentWizardPanel: React.FC = () => {
           id: `p${targetPageNum}_sub_${Date.now()}`,
           type: 'text',
           x: 50,
-          y: 132,
+          y: 260,
           width: 700,
-          height: 28,
+          height: 24,
           text: subParts.join(' | '),
           fontSize: 11,
-          fontFamily: 'Roboto',
+          fontFamily: 'Poppins',
           bold: true,
           italic: false,
           underline: false,
           lineHeight: 1.4,
           letterSpacing: 0,
-          color: '#1E40AF',
+          color: '#0F172A',
           align: 'center',
           rotation: 0,
           opacity: 100
         });
       }
 
-      // 3. Body Narrative Text Columns
-      const words = (reportConfirmData.article || '').split(' ');
-      const mid = Math.ceil(words.length / 2);
-      const col1 = words.slice(0, mid).join(' ');
-      const col2 = words.slice(mid).join(' ');
+      // 3. Dignitaries Badge (y: 285)
+      if (reportConfirmData.host) {
+        updatedElements.push({
+          id: `p${targetPageNum}_host_${Date.now()}`,
+          type: 'text',
+          x: 50,
+          y: 285,
+          width: 700,
+          height: 22,
+          text: `Presided by: ${detectAndFixCase(reportConfirmData.host, 'title')}`,
+          fontSize: 10,
+          fontFamily: 'Poppins',
+          bold: true,
+          italic: true,
+          underline: false,
+          lineHeight: 1.4,
+          letterSpacing: 0,
+          color: '#EA580C',
+          align: 'center',
+          rotation: 0,
+          opacity: 100
+        });
+      }
 
+      // 4. Body Narrative Paragraph (Unified full-width block with proper typography)
       const hasPhotos = (reportConfirmData.photos || []).length > 0;
-      const textHeight = hasPhotos ? 320 : 700;
+      const textHeight = hasPhotos ? 215 : 620;
 
       updatedElements.push({
-        id: `p${targetPageNum}_body_left_${Date.now()}`,
+        id: `p${targetPageNum}_body_${Date.now()}`,
         type: 'text',
         x: 50,
-        y: 170,
-        width: 335,
+        y: 310,
+        width: 700,
         height: textHeight,
-        text: col1,
+        text: reportConfirmData.article || '',
         fontSize: 10.5,
         fontFamily: 'Georgia',
         bold: false,
         italic: false,
         underline: false,
-        lineHeight: 1.4,
+        lineHeight: 1.5,
         letterSpacing: 0,
         color: '#334155',
         align: 'left',
@@ -1301,43 +1327,20 @@ const ContentWizardPanel: React.FC = () => {
         opacity: 100
       });
 
-      if (col2.trim()) {
-        updatedElements.push({
-          id: `p${targetPageNum}_body_right_${Date.now()}`,
-          type: 'text',
-          x: 415,
-          y: 170,
-          width: 335,
-          height: textHeight,
-          text: col2,
-          fontSize: 10.5,
-          fontFamily: 'Georgia',
-          bold: false,
-          italic: false,
-          underline: false,
-          lineHeight: 1.4,
-          letterSpacing: 0,
-          color: '#334155',
-          align: 'left',
-          rotation: 0,
-          opacity: 100
-        });
-      }
-
-      // 4. Photos
+      // 5. Photos Gallery (placed below text at y: 535)
       const validPhotos = (reportConfirmData.photos || []).slice(0, 3);
       validPhotos.forEach((photoUrl, idx) => {
         let x = 50;
-        let y = 510;
+        let y = 535;
         let width = 700;
-        let height = 360;
+        let height = 350;
 
         if (validPhotos.length === 1) {
-          x = 80; y = 510; width = 640; height = 360;
+          x = 80; y = 535; width = 640; height = 340;
         } else if (validPhotos.length === 2) {
-          x = idx === 0 ? 50 : 415; y = 510; width = 335; height = 340;
+          x = idx === 0 ? 50 : 415; y = 535; width = 335; height = 330;
         } else if (validPhotos.length === 3) {
-          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 510; width = 220; height = 320;
+          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 535; width = 220; height = 320;
         }
 
         updatedElements.push({
