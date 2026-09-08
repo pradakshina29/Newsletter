@@ -1135,18 +1135,23 @@ const ContentWizardPanel: React.FC = () => {
 
           if (response.ok) {
             const rawData = await response.json();
-            if (rawData.title && !rawData.title.includes("VERSION") && !rawData.title.includes("IQAC")) {
+            if (rawData.title && !rawData.title.includes("VERSION") && !rawData.title.includes("IQAC") && !rawData.title.toLowerCase().includes("example report")) {
               parsed.title = cleanParsedText(rawData.title);
             }
             if (rawData.category) parsed.category = rawData.category;
             if (rawData.teamName) parsed.teamName = cleanParsedText(rawData.teamName);
             if (rawData.studentName || rawData.members || rawData.person) {
-              parsed.student = cleanParsedText(rawData.studentName || rawData.members || rawData.person);
+              const incomingPerson = cleanParsedText(rawData.studentName || rawData.members || rawData.person);
+              if (incomingPerson && !incomingPerson.toLowerCase().includes("distinguished") && !incomingPerson.toLowerCase().includes("student delegation")) {
+                parsed.student = incomingPerson;
+              }
             }
             if (rawData.className) parsed.classDept = cleanParsedText(rawData.className);
-            if (rawData.date && !rawData.date.includes("18/02/2022")) parsed.date = cleanParsedText(rawData.date);
+            if (rawData.date && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) parsed.date = cleanParsedText(rawData.date);
             if (rawData.highlights) parsed.details = cleanParsedText(rawData.highlights);
-            if (rawData.article) parsed.article = cleanParsedText(rawData.article);
+            if (rawData.article && !rawData.article.includes("Distinguished Resource Person")) {
+              parsed.article = cleanParsedText(rawData.article);
+            }
           }
         } catch (apiErr) {
           console.warn("AI server enhancement skipped, using offline smart parsing:", apiErr);
