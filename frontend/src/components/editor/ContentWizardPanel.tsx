@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
-import { extractDocumentContent, parseReportEntities, ParsedReportData } from '../../utils/documentParser';
+import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
 
 
@@ -41,12 +41,7 @@ const AccordionSection: React.FC<AccordionSectionProps> = ({ title, isOpen, onTo
 
 const formatToParagraph = (str: string): string => {
   if (!str) return '';
-  return str
-    .replace(/^[•\-\*\d+\.]\s*/gm, '')
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/[•\*]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  return deduplicateSentences(str);
 };
 
 const ContentWizardPanel: React.FC = () => {
@@ -532,139 +527,168 @@ const ContentWizardPanel: React.FC = () => {
       }
     }
 
-    let updatedElements: any[] = [...page.elements];
+    // Canonical CTRL+READ header and footer elements
+    const deptUpper = (activeProject.department || "Information Technology").toUpperCase();
+    const headerElements = [
+      { id: `p${pageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+      { id: `p${pageNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
+      { id: `p${pageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+      { id: `p${pageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+      { id: `p${pageNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
+      { id: `p${pageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5, lineHeight: 1.0 },
+      { id: `p${pageNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
+      { id: `p${pageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+      { id: `p${pageNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+    ];
 
-    // Ensure title text element exists (strictly inside content safe area y >= 220) ONLY if user provided a title
+    const footerElements = [
+      { id: `p${pageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pageNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+    ];
+
+    let currentY = 215;
+    const contentElements: any[] = [];
+
+    // Title banner
     if (headlineVal.trim()) {
-      let titleEl = updatedElements.find(el => el.id === `p${pageNum}_title`);
-      if (titleEl && titleEl.type === 'text') {
-        (titleEl as any).text = headlineVal.toUpperCase();
-        (titleEl as any).y = Math.max(220, (titleEl as any).y || 220);
-      } else {
-        updatedElements.push({
-          id: `p${pageNum}_title`,
-          type: 'text',
-          x: 50,
-          y: 220,
-          width: 700,
-          height: 35,
-          text: headlineVal.toUpperCase(),
-          fontSize: 18,
-          fontFamily: 'Poppins',
-          color: '#1e40af',
-          bold: true,
-          italic: false,
-          underline: false,
-          align: 'center',
-          lineHeight: 1.4,
-          letterSpacing: 0,
-          opacity: 100,
-          rotation: 0
-        });
-      }
-    } else {
-      // If title is empty, remove any pre-existing hardcoded section title for this page
-      updatedElements = updatedElements.filter(el => el.id !== `p${pageNum}_title`);
+      const cleanTitle = headlineVal.trim();
+      const titleLen = cleanTitle.length;
+      const titleHeight = titleLen > 55 ? 46 : 28;
+      const titleFontSize = titleLen > 70 ? 15.5 : titleLen > 50 ? 16.5 : 18;
+
+      contentElements.push({
+        id: `p${pageNum}_title`,
+        type: 'text',
+        x: 50,
+        y: currentY,
+        width: 700,
+        height: titleHeight,
+        text: cleanTitle.toUpperCase(),
+        fontSize: titleFontSize,
+        fontFamily: 'Poppins',
+        color: '#1e40af',
+        bold: true,
+        italic: false,
+        underline: false,
+        align: 'center',
+        lineHeight: 1.25,
+        letterSpacing: 0,
+        opacity: 100,
+        rotation: 0
+      });
+
+      currentY += titleHeight + 8;
     }
 
-    // Ensure subtitle text element exists
-    if (subTitleVal) {
-      let subTitleEl = updatedElements.find(el => el.id === `p${pageNum}_sub_title`);
-      if (subTitleEl && subTitleEl.type === 'text') {
-        (subTitleEl as any).text = subTitleVal;
-        (subTitleEl as any).y = Math.max(260, (subTitleEl as any).y || 260);
-      } else {
-        updatedElements.push({
-          id: `p${pageNum}_sub_title`,
-          type: 'text',
-          x: 50,
-          y: 260,
-          width: 700,
-          height: 25,
-          text: subTitleVal,
-          fontSize: 12,
-          fontFamily: 'Poppins',
-          color: '#0f172a',
-          bold: true,
-          italic: false,
-          underline: false,
-          align: 'center',
-          lineHeight: 1.4,
-          letterSpacing: 0,
-          opacity: 100,
-          rotation: 0
-        });
-      }
+    // Subtitle / metadata banner
+    if (subTitleVal.trim()) {
+      const subText = subTitleVal.trim();
+      const subHeight = subText.length > 85 ? 32 : 20;
+      const subFontSize = subText.length > 85 ? 10 : 10.5;
+
+      contentElements.push({
+        id: `p${pageNum}_sub_title`,
+        type: 'text',
+        x: 50,
+        y: currentY,
+        width: 700,
+        height: subHeight,
+        text: subText,
+        fontSize: subFontSize,
+        fontFamily: 'Poppins',
+        color: '#0f172a',
+        bold: true,
+        italic: false,
+        underline: false,
+        align: 'center',
+        lineHeight: 1.35,
+        letterSpacing: 0,
+        opacity: 100,
+        rotation: 0
+      });
+
+      currentY += subHeight + 4;
     }
 
-    // Ensure body text element exists (formatted as a clean continuous paragraph)
-    if (structuredText) {
-      const cleanPara = formatToParagraph(structuredText);
-      let textEl = updatedElements.find(el => el.id === `p${pageNum}_text`);
-      const len = cleanPara.length;
-      const fitFontSize = len > 800 ? 9.5 : len > 500 ? 10 : 11;
+    // Subtle divider line
+    contentElements.push({
+      id: `p${pageNum}_meta_line`,
+      type: 'shape',
+      shapeType: 'rect',
+      x: 180,
+      y: currentY + 2,
+      width: 440,
+      height: 1,
+      fillColor: '#CBD5E1',
+      strokeColor: 'transparent',
+      strokeWidth: 0,
+      opacity: 80,
+      rotation: 0
+    });
 
-      if (textEl && textEl.type === 'text') {
-        (textEl as any).text = cleanPara;
-        (textEl as any).fontSize = fitFontSize;
-        (textEl as any).y = Math.max(295, (textEl as any).y || 295);
-      } else {
-        updatedElements.push({
-          id: `p${pageNum}_text`,
-          type: 'text',
-          x: 50,
-          y: 295,
-          width: 700,
-          height: 200,
-          text: cleanPara,
-          fontSize: fitFontSize,
-          fontFamily: 'Poppins',
-          color: '#334155',
-          bold: false,
-          italic: false,
-          underline: false,
-          align: 'left',
-          lineHeight: 1.5,
-          letterSpacing: 0,
-          opacity: 100,
-          rotation: 0
-        });
-      }
-    }
+    currentY += 10;
 
-    // Append uploaded photos cleanly below text (MAXIMUM 3 PHOTOS PER CONTENT ITEM)
+    // Body narrative paragraph
     const validPhotos = (photos || []).slice(0, 3);
+    const hasPhotos = validPhotos.length > 0;
+
+    if (structuredText.trim()) {
+      const cleanPara = formatToParagraph(structuredText);
+      const len = cleanPara.length;
+      const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
+      const fitFontSize = (hasPhotos && len > 650) ? 9.5 : (len > 800 ? 9.5 : len > 500 ? 10 : 10.5);
+
+      contentElements.push({
+        id: `p${pageNum}_text`,
+        type: 'text',
+        x: 50,
+        y: currentY,
+        width: 700,
+        height: bodyHeight,
+        text: cleanPara,
+        fontSize: fitFontSize,
+        fontFamily: 'Georgia',
+        color: '#334155',
+        bold: false,
+        italic: false,
+        underline: false,
+        align: 'left',
+        lineHeight: 1.5,
+        letterSpacing: 0,
+        opacity: 100,
+        rotation: 0
+      });
+    }
+
     if (photos && photos.length > 3) {
       showWarning("Maximum 3 photos allowed for this content item. Placing top 3 photos into layout.", "Photo Limit");
     }
 
-    if (validPhotos && validPhotos.length > 0) {
-      updatedElements = updatedElements.filter(el => el.type !== 'image' || el.id.includes('logo') || el.id.includes('pic_'));
-
+    // Photos Gallery
+    if (hasPhotos) {
       validPhotos.forEach((photoUrl, idx) => {
         let x = 50;
-        let y = 510;
+        let y = 550;
         let width = 700;
-        let height = 360;
+        let height = 325;
 
         if (validPhotos.length === 1) {
-          x = 80;
-          y = 510;
-          width = 640;
-          height = 360;
+          x = 100;
+          y = 550;
+          width = 600;
+          height = 325;
         } else if (validPhotos.length === 2) {
           x = idx === 0 ? 50 : 415;
-          y = 510;
+          y = 550;
           width = 335;
-          height = 340;
+          height = 325;
         } else if (validPhotos.length === 3) {
           x = idx === 0 ? 50 : idx === 1 ? 290 : 530;
-          y = 510;
+          y = 550;
           width = 220;
-          height = 320;
+          height = 325;
         }
 
-        updatedElements.push({
+        contentElements.push({
           id: `p${pageNum}_img_${idx + 1}_${Date.now()}`,
           type: 'image',
           x,
@@ -672,13 +696,19 @@ const ContentWizardPanel: React.FC = () => {
           width,
           height,
           url: photoUrl,
-          borderRadius: 12,
+          borderRadius: 10,
           shadow: 'md',
           rotation: 0,
           opacity: 100
         });
       });
     }
+
+    const updatedElements = [
+      ...headerElements,
+      ...contentElements,
+      ...footerElements
+    ];
 
     const updatedPages = [...activeProject.pages];
     updatedPages[pageIndex] = {
@@ -1135,22 +1165,33 @@ const ContentWizardPanel: React.FC = () => {
 
           if (response.ok) {
             const rawData = await response.json();
-            if (rawData.title && !rawData.title.includes("VERSION") && !rawData.title.includes("IQAC") && !rawData.title.toLowerCase().includes("example report")) {
+            if (rawData.title && 
+                !rawData.title.toLowerCase().includes("example report") && 
+                !rawData.title.toLowerCase().includes("quality system") && 
+                !rawData.title.toLowerCase().includes("report of the event") && 
+                !rawData.title.includes("VERSION") && 
+                !rawData.title.includes("IQAC")) {
               parsed.title = cleanParsedText(rawData.title);
             }
             if (rawData.category) parsed.category = rawData.category;
-            if (rawData.teamName) parsed.teamName = cleanParsedText(rawData.teamName);
-            if (rawData.studentName || rawData.members || rawData.person) {
-              const incomingPerson = cleanParsedText(rawData.studentName || rawData.members || rawData.person);
-              if (incomingPerson && !incomingPerson.toLowerCase().includes("distinguished") && !incomingPerson.toLowerCase().includes("student delegation")) {
-                parsed.student = incomingPerson;
+            if (rawData.teamName && !rawData.teamName.toLowerCase().startsWith("nil")) {
+              parsed.teamName = cleanParsedText(rawData.teamName);
+            }
+            if (rawData.person || rawData.studentName) {
+              const spk = cleanParsedText(rawData.person || rawData.studentName);
+              if (spk && !spk.toLowerCase().includes("distinguished resource person") && spk.length > 3) {
+                parsed.student = spk;
               }
             }
             if (rawData.className) parsed.classDept = cleanParsedText(rawData.className);
-            if (rawData.date && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) parsed.date = cleanParsedText(rawData.date);
+            if (rawData.date && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) {
+              parsed.date = cleanParsedText(rawData.date);
+            }
             if (rawData.highlights) parsed.details = cleanParsedText(rawData.highlights);
-            if (rawData.article && !rawData.article.includes("Distinguished Resource Person")) {
-              parsed.article = cleanParsedText(rawData.article);
+            if (rawData.article && 
+                !rawData.article.toLowerCase().includes("example report") && 
+                rawData.article.length > 80) {
+              parsed.article = deduplicateSentences(cleanParsedText(rawData.article));
             }
           }
         } catch (apiErr) {
@@ -1226,34 +1267,58 @@ const ContentWizardPanel: React.FC = () => {
       setGeneratedArticle(reportConfirmData.article);
       handleUpdatePageTitle(targetIndex, reportConfirmData.title);
 
-      // Preserve permanent header & footer canvas elements
-      let updatedElements = (targetPage.elements || []).filter(el => 
-        el.id.includes('header') || el.id.includes('footer') || el.id.includes('pnum') || el.id.includes('mast') || el.id.includes('logo') || el.id.includes('dept')
-      );
+      // Canonical CTRL+READ header and footer elements
+      const deptUpper = (activeProject.department || "Information Technology").toUpperCase();
+      const headerElements = [
+        { id: `p${targetPageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+        { id: `p${targetPageNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
+        { id: `p${targetPageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+        { id: `p${targetPageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+        { id: `p${targetPageNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
+        { id: `p${targetPageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5, lineHeight: 1.0 },
+        { id: `p${targetPageNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
+        { id: `p${targetPageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+        { id: `p${targetPageNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+      ];
 
-      // 1. Article Title Banner (Positioned cleanly at y: 220 in safe area)
-      updatedElements.push({
-        id: `p${targetPageNum}_title_${Date.now()}`,
-        type: 'text',
-        x: 50,
-        y: 220,
-        width: 700,
-        height: 38,
-        text: detectAndFixCase(reportConfirmData.title, 'title'),
-        fontSize: 18,
-        fontFamily: 'Poppins',
-        bold: true,
-        italic: false,
-        underline: false,
-        lineHeight: 1.3,
-        letterSpacing: 0,
-        color: '#1E40AF',
-        align: 'center',
-        rotation: 0,
-        opacity: 100
-      });
+      const footerElements = [
+        { id: `p${targetPageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${targetPageNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+      ];
 
-      // 2. Subtitle / Resource Person & Event Date Banner (y: 260)
+      const cleanTitle = detectAndFixCase(reportConfirmData.title, 'title');
+      const titleLen = cleanTitle.length;
+      const titleHeight = titleLen > 55 ? 46 : 28;
+      const titleFontSize = titleLen > 70 ? 15.5 : titleLen > 50 ? 16.5 : 18;
+
+      let currentY = 215;
+
+      // 1. Article Title Banner (Positioned cleanly at y: 215 in safe area)
+      const contentElements: any[] = [
+        {
+          id: `p${targetPageNum}_title_${Date.now()}`,
+          type: 'text',
+          x: 50,
+          y: currentY,
+          width: 700,
+          height: titleHeight,
+          text: cleanTitle,
+          fontSize: titleFontSize,
+          fontFamily: 'Poppins',
+          bold: true,
+          italic: false,
+          underline: false,
+          lineHeight: 1.25,
+          letterSpacing: 0,
+          color: '#1E40AF',
+          align: 'center',
+          rotation: 0,
+          opacity: 100
+        }
+      ];
+
+      currentY += titleHeight + 8;
+
+      // 2. Subtitle / Resource Person & Event Date Banner
       const subParts = [
         reportConfirmData.student ? `Resource Person: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
         reportConfirmData.date ? `Date: ${reportConfirmData.date}` : '',
@@ -1261,65 +1326,94 @@ const ContentWizardPanel: React.FC = () => {
       ].filter(Boolean);
 
       if (subParts.length > 0) {
-        updatedElements.push({
+        const subText = subParts.join(' | ');
+        const subHeight = subText.length > 85 ? 32 : 20;
+        const subFontSize = subText.length > 85 ? 10 : 10.5;
+
+        contentElements.push({
           id: `p${targetPageNum}_sub_${Date.now()}`,
           type: 'text',
           x: 50,
-          y: 260,
+          y: currentY,
           width: 700,
-          height: 24,
-          text: subParts.join(' | '),
-          fontSize: 11,
+          height: subHeight,
+          text: subText,
+          fontSize: subFontSize,
           fontFamily: 'Poppins',
           bold: true,
           italic: false,
           underline: false,
-          lineHeight: 1.4,
+          lineHeight: 1.35,
           letterSpacing: 0,
           color: '#0F172A',
           align: 'center',
           rotation: 0,
           opacity: 100
         });
+
+        currentY += subHeight + 4;
       }
 
-      // 3. Dignitaries Badge (y: 285)
-      if (reportConfirmData.host) {
-        updatedElements.push({
+      // 3. Dignitaries Badge (Only if host provided)
+      if (reportConfirmData.host && reportConfirmData.host.trim().length > 5) {
+        const cleanHost = detectAndFixCase(reportConfirmData.host.replace(/\s+/g, ' ').trim(), 'title');
+        contentElements.push({
           id: `p${targetPageNum}_host_${Date.now()}`,
           type: 'text',
           x: 50,
-          y: 285,
+          y: currentY,
           width: 700,
-          height: 22,
-          text: `Presided by: ${detectAndFixCase(reportConfirmData.host, 'title')}`,
-          fontSize: 10,
+          height: 18,
+          text: `Presided by: ${cleanHost}`,
+          fontSize: 9.5,
           fontFamily: 'Poppins',
           bold: true,
           italic: true,
           underline: false,
-          lineHeight: 1.4,
+          lineHeight: 1.3,
           letterSpacing: 0,
           color: '#EA580C',
           align: 'center',
           rotation: 0,
           opacity: 100
         });
+
+        currentY += 22;
       }
 
-      // 4. Body Narrative Paragraph (Unified full-width block with proper typography)
-      const hasPhotos = (reportConfirmData.photos || []).length > 0;
-      const textHeight = hasPhotos ? 215 : 620;
+      // 4. Subtle Meta Divider Line
+      contentElements.push({
+        id: `p${targetPageNum}_meta_line_${Date.now()}`,
+        type: 'shape',
+        shapeType: 'rect',
+        x: 180,
+        y: currentY + 2,
+        width: 440,
+        height: 1,
+        fillColor: '#CBD5E1',
+        strokeColor: 'transparent',
+        strokeWidth: 0,
+        opacity: 80,
+        rotation: 0
+      });
 
-      updatedElements.push({
+      currentY += 10;
+
+      // 5. Body Narrative Paragraph
+      const hasPhotos = (reportConfirmData.photos || []).length > 0;
+      const bodyText = reportConfirmData.article || '';
+      const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
+      const bodyFontSize = (hasPhotos && bodyText.length > 650) ? 9.5 : 10.5;
+
+      contentElements.push({
         id: `p${targetPageNum}_body_${Date.now()}`,
         type: 'text',
         x: 50,
-        y: 310,
+        y: currentY,
         width: 700,
-        height: textHeight,
-        text: reportConfirmData.article || '',
-        fontSize: 10.5,
+        height: bodyHeight,
+        text: bodyText,
+        fontSize: bodyFontSize,
         fontFamily: 'Georgia',
         bold: false,
         italic: false,
@@ -1332,23 +1426,23 @@ const ContentWizardPanel: React.FC = () => {
         opacity: 100
       });
 
-      // 5. Photos Gallery (placed below text at y: 535)
+      // 6. Photos Gallery (Placed cleanly at y: 550)
       const validPhotos = (reportConfirmData.photos || []).slice(0, 3);
       validPhotos.forEach((photoUrl, idx) => {
         let x = 50;
-        let y = 535;
+        let y = 550;
         let width = 700;
-        let height = 350;
+        let height = 325;
 
         if (validPhotos.length === 1) {
-          x = 80; y = 535; width = 640; height = 340;
+          x = 100; y = 550; width = 600; height = 325;
         } else if (validPhotos.length === 2) {
-          x = idx === 0 ? 50 : 415; y = 535; width = 335; height = 330;
+          x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
         } else if (validPhotos.length === 3) {
-          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 535; width = 220; height = 320;
+          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
         }
 
-        updatedElements.push({
+        contentElements.push({
           id: `p${targetPageNum}_img_${idx + 1}_${Date.now()}`,
           type: 'image',
           x,
@@ -1356,12 +1450,18 @@ const ContentWizardPanel: React.FC = () => {
           width,
           height,
           url: photoUrl,
-          borderRadius: 12,
+          borderRadius: 10,
           shadow: 'md',
           rotation: 0,
           opacity: 100
         });
       });
+
+      const updatedElements = [
+        ...headerElements,
+        ...contentElements,
+        ...footerElements
+      ];
 
       const updatedPages = [...activeProject.pages];
       updatedPages[targetIndex] = {

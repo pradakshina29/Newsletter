@@ -686,7 +686,11 @@ public class AiController {
         if (val == null) return "";
         String cleaned = val;
         
-        // Strip out repetitive boilerplate fragments
+        // Strip out repetitive boilerplate fragments & placeholder terms
+        cleaned = cleaned.replaceAll("(?i)\\bexample report\\b", "");
+        cleaned = cleaned.replaceAll("(?i)\\bquality system document\\b", "");
+        cleaned = cleaned.replaceAll("(?i)\\breport of the event\\b", "");
+        cleaned = cleaned.replaceAll("(?i)\\bdistinguished resource person\\b", "");
         cleaned = cleaned.replaceAll("(?i)national-level initiative", "academic initiative");
         cleaned = cleaned.replaceAll("(?i)national level initiative", "academic initiative");
         cleaned = cleaned.replaceAll("(?i)national-level", "");
@@ -747,9 +751,9 @@ public class AiController {
         String cPart = cleanValue(participants);
         String cKey = cleanValue(keywords);
 
-        if (cEvent.isEmpty()) cEvent = "Department Event";
+        if (cEvent.isEmpty() || cEvent.equalsIgnoreCase("example report")) cEvent = "Department Academic Event";
         if (cDate.isEmpty()) cDate = "KPRCAS";
-        if (cPerson.isEmpty()) cPerson = "Student Delegation";
+        if (cPerson.isEmpty() || cPerson.equalsIgnoreCase("distinguished resource person")) cPerson = "Subject Expert & Key Speaker";
         if (cPart.isEmpty()) cPart = "Department Students";
 
         List<String> lines = new ArrayList<>();
@@ -836,18 +840,66 @@ public class AiController {
             category = "welcome";
         }
 
-        // Extract Title: First non-empty line or first sentence
-        String[] lines = text.split("[\\r\\n]+");
+        // Extract Title using multi-pattern matching and negative filter
+        String[] titlePatterns = {
+            "(?i)(?:Event Title|Title of the Event|Name of the Event|Topic|Theme|Project Title|Paper Title|Event Name)\\s*[:\\-\\s]*\\s*([^\\n\\r]+?)(?=\\s*(?:Organizing Body|Collaborations|Details of|Resource Person|Speaker|Organizing Department|Nature of|Event Date|Date|Venue|Time|\\n\\n|$))",
+            "(?i)CAMPUS TO CAREER SERIES[^\\n\\r]*",
+            "(?i)Guest Lecture on\\s+([^\\n\\r]+)",
+            "(?i)Workshop on\\s+([^\\n\\r]+)",
+            "(?i)Seminar on\\s+([^\\n\\r]+)",
+            "(?i)Orientation Program on\\s+([^\\n\\r]+)",
+            "(?i)(?:Two|One)[- ]Day\\s+(?:National|International|Hands[- ]on)?\\s*(?:Workshop|Seminar|Conference|Symposium|FDP)\\s+on\\s+([^\\n\\r]+)",
+            "(?i)Placement Drive by\\s+([^\\n\\r]+)"
+        };
+
         String extractedTitle = "";
-        for (String line : lines) {
-            String trimmed = line.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
-            if (trimmed.length() > 5 && trimmed.length() < 120 && !trimmed.toLowerCase().startsWith("page") && !trimmed.toLowerCase().startsWith("department")) {
-                extractedTitle = trimmed;
-                break;
+        for (String patStr : titlePatterns) {
+            Pattern pat = Pattern.compile(patStr);
+            Matcher mat = pat.matcher(text);
+            if (mat.find()) {
+                String candidate = (mat.groupCount() >= 1 && mat.group(1) != null) ? mat.group(1).trim() : mat.group(0).trim();
+                candidate = candidate.replaceAll("^[:\\-\\s•]+", "").replaceAll("[:\\-\\s•]+$", "").trim();
+                String candLower = candidate.toLowerCase();
+                if (candidate.length() > 4 && 
+                    !candLower.contains("example report") && 
+                    !candLower.contains("quality system") && 
+                    !candLower.contains("report of the event") &&
+                    !candLower.contains("activity report") &&
+                    !candLower.contains("version:")) {
+                    extractedTitle = candidate;
+                    break;
+                }
             }
         }
+
+        if (extractedTitle.isEmpty()) {
+            String[] lines = text.split("[\\r\\n]+");
+            for (String line : lines) {
+                String trimmed = line.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
+                String tLower = trimmed.toLowerCase();
+                if (trimmed.length() > 6 && trimmed.length() < 120 &&
+                    !tLower.contains("example report") &&
+                    !tLower.contains("quality system") &&
+                    !tLower.contains("report of the event") &&
+                    !tLower.contains("activity report") &&
+                    !tLower.contains("version:") &&
+                    !tLower.contains("iqac") &&
+                    !tLower.startsWith("page") &&
+                    !tLower.startsWith("date") &&
+                    !tLower.startsWith("venue") &&
+                    !tLower.startsWith("time") &&
+                    !tLower.startsWith("kpr") &&
+                    !tLower.startsWith("department")) {
+                    extractedTitle = trimmed;
+                    break;
+                }
+            }
+        }
+
         if (extractedTitle.isEmpty()) {
             extractedTitle = category.substring(0, 1).toUpperCase() + category.substring(1) + " Activity";
+        } else {
+            extractedTitle = extractedTitle.toUpperCase();
         }
 
         // Extract Date: regex for month year or dates
@@ -858,12 +910,29 @@ public class AiController {
             extractedDate = dateMatcher.group(0);
         }
 
-        // Extract Person / Speaker / Students / Faculty
+        // Extract Person / Speaker / Students / Faculty / Resource Person
         String extractedPerson = "";
-        Pattern personPattern = Pattern.compile("(?i)(dr\\.|mr\\.|ms\\.|prof\\.|speaker|resource person|author|placed|by)\\s+([A-Z][a-z]+(?:\\s+[A-Z][a-z]+)*)");
-        Matcher personMatcher = personPattern.matcher(text);
-        if (personMatcher.find()) {
-            extractedPerson = personMatcher.group(0);
+        Pattern resBlock = Pattern.compile("(?i)(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\\(s\\)|Expert)\\s*[:\\-\\s]*\\s*([\\s\\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|\\n\\s*\\n|$))");
+        Matcher resMatcher = resBlock.matcher(text);
+        if (resMatcher.find()) {
+            String cand = resMatcher.group(1).replaceAll("[\\r\\n]+", ", ").replaceAll("\\s+", " ").trim();
+            cand = cand.replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "").replaceAll("(?i)^Name\\s*:\\s*", "").trim();
+            if (cand.length() > 3 && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("seminar") && !cand.toLowerCase().startsWith("department")) {
+                extractedPerson = cand;
+            }
+        }
+
+        if (extractedPerson.isEmpty()) {
+            Pattern personPattern = Pattern.compile("(?i)(dr\\.|mr\\.|ms\\.|mrs\\.|prof\\.)\\s+([A-Z][a-z]+(?:\\s+[A-Z]\\.?)?(?:\\s+[A-Z][a-z]+)+(?:,\\s*[A-Za-z\\s\\-&]+)?)");
+            Matcher personMatcher = personPattern.matcher(text);
+            while (personMatcher.find()) {
+                String match = personMatcher.group(0).trim();
+                String matchLower = match.toLowerCase();
+                if (!matchLower.contains("geetha") && !matchLower.contains("sharmila") && !matchLower.contains("principal") && !matchLower.contains("dean")) {
+                    extractedPerson = match;
+                    break;
+                }
+            }
         }
 
         // Extract Team, Members, Class, Student Names using NewsletterGeneratorService

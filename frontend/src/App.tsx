@@ -148,16 +148,21 @@ function App() {
     localStorage.setItem('userRole', defaultUser.role);
     localStorage.setItem('userDept', defaultUser.department);
     setEditingProjectId(null);
+    setEditingPdfFile(null);
     setView('dashboard');
   };
 
-  const startEditing = (projectId: number) => {
+  const [editingPdfFile, setEditingPdfFile] = useState<File | null>(null);
+
+  const startEditing = (projectId: number, file?: File) => {
     setEditingProjectId(projectId);
+    setEditingPdfFile(file || null);
     setView('editor');
   };
 
   const closeEditor = () => {
     setEditingProjectId(null);
+    setEditingPdfFile(null);
     setView('dashboard');
   };
 
@@ -344,6 +349,7 @@ function App() {
                 onClose={closeEditor} 
                 darkMode={darkMode}
                 toggleDarkMode={toggleDarkMode}
+                initialPdfFile={editingPdfFile}
               />
             </EditorProvider>
           </ErrorBoundary>

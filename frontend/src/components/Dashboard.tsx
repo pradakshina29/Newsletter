@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { UserSession, ProjectData } from '../types/editor';
 import { useNotification } from '../context/NotificationContext';
 import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles, Shield, Edit, Edit3, Eye, Save, Layers, Copy, Trash2, Folder, ExternalLink, Sun, Moon, Upload } from 'lucide-react';
@@ -6,7 +6,7 @@ import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles,
 interface DashboardProps {
   user: UserSession;
   onLogout: () => void;
-  onEditProject: (projectId: number) => void;
+  onEditProject: (projectId: number, file?: File) => void;
   onOpenAdmin: () => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
@@ -124,6 +124,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const pdfUploadRef = useRef<HTMLInputElement>(null);
 
   const handleOpenCreateModal = () => {
     setNewProjectName('');
@@ -908,6 +909,50 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
     }
   };
 
+  const handleImportPdfDirectly = async (file: File) => {
+    if (!file) return;
+    const fileNameClean = file.name.replace(/\.[^/.]+$/, "");
+    setSaving(true);
+    try {
+      const deptName = user.department || 'Information Technology';
+      const initialContent = createBlankNewsletterContent(fileNameClean, deptName);
+      
+      let createdId = Date.now();
+      try {
+        const response = await fetch('/api/projects', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${user.token}`
+          },
+          body: JSON.stringify({
+            name: `${fileNameClean} (PDF Import)`,
+            category: 'Academic',
+            department: deptName,
+            status: 'DRAFT',
+            isTemplate: false,
+            content: initialContent
+          })
+        });
+
+        if (response.ok) {
+          const created = await response.json();
+          createdId = created.id;
+        }
+      } catch (e) {
+        console.warn("Backend project creation offline fallback", e);
+      }
+
+      showSuccess(`Opening ${file.name} in Import & Place workspace...`, "PDF Uploaded");
+      onEditProject(createdId, file);
+    } catch (err) {
+      console.error("PDF upload error", err);
+      showError("Error starting PDF Import workspace.", "Upload Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleImportProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -915,20 +960,9 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
     const fileNameClean = file.name.replace(/\.[^/.]+$/, "");
     setRawContentFileName(fileNameClean);
 
-    // Process PDF file directly
+    // Process PDF file directly -> OPEN IMPORT & PLACE WORKSPACE
     if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
-      setSaving(true);
-      try {
-        const pdfText = await extractTextFromPdf(file);
-        const articles = parseRawTextToArticles(pdfText, fileNameClean);
-        setExtractedArticles(articles);
-        setShowRawContentModal(true);
-      } catch (err) {
-        console.error("PDF parsing error", err);
-        showError("Error parsing PDF file.", "PDF Error");
-      } finally {
-        setSaving(false);
-      }
+      await handleImportPdfDirectly(file);
       return;
     }
 
@@ -1263,7 +1297,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                   <p className="text-xs text-slate-400 mt-0.5">Select the official 8-page newsletter template, start a blank issue, or generate content using AI.</p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   {/* CTRL+READ Official Department Newsletter Template (Single Official Template) */}
                   <div 
                     onClick={() => {
@@ -1345,7 +1379,44 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                       ✨ Generate with AI
                     </button>
                   </div>
+
+                  {/* Upload Existing PDF (Two-Panel Import & Place Workspace) */}
+                  <div 
+                    onClick={() => pdfUploadRef.current?.click()}
+                    className="group bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950/60 border border-indigo-500/30 hover:border-indigo-400/60 rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] h-48"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">
+                        PDF IMPORT
+                      </span>
+                      <Upload className="w-4 h-4 text-indigo-400" />
+                    </div>
+                    <div className="space-y-1 my-2">
+                      <h4 className="font-extrabold text-sm text-white group-hover:text-indigo-300 transition-colors">
+                        Upload Existing PDF
+                      </h4>
+                      <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
+                        Two-Panel Import & Place: Drag whole A4 PDF pages with dynamic page count & smart split.
+                      </p>
+                    </div>
+                    <button className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl text-center shadow-md flex items-center justify-center space-x-1.5">
+                      <Upload className="w-3 h-3 text-indigo-200" />
+                      <span>Import & Place PDF</span>
+                    </button>
+                  </div>
                 </div>
+
+                <input
+                  type="file"
+                  ref={pdfUploadRef}
+                  accept=".pdf"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files.length > 0) {
+                      handleImportPdfDirectly(e.target.files[0]);
+                    }
+                  }}
+                  className="hidden"
+                />
               </div>
 
               {/* Segmented Tab List for Drafts & Published */}

@@ -32,7 +32,52 @@ export interface ParsedReportData {
 }
 
 /**
- * Universal document extractor: Extracts clean text AND embedded geo-tagged event photos from any document format (PDF, DOCX, TXT, JSON, MD)
+ * Deduplicates sentences and strips repeated boilerplate phrases.
+ */
+export function deduplicateSentences(text: string): string {
+  if (!text) return '';
+
+  // Clean raw bullet points, symbols, and irregular spaces
+  const cleaned = text
+    .replace(/[•\*\-]\s*/g, '')
+    .replace(/[\r\n]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Split into sentences using punctuation boundaries
+  const rawSentences = cleaned.split(/(?<=[.!?])\s+/);
+  const uniqueSentences: string[] = [];
+  const seenNorm = new Set<string>();
+
+  for (const s of rawSentences) {
+    const trimmed = s.trim();
+    if (trimmed.length < 5) continue;
+
+    // Normalized key for comparison (lowercase alphanumeric only)
+    const normKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (normKey.length < 4) continue;
+
+    // Check if this sentence is already seen or a duplicate of an existing sentence
+    let isDuplicate = false;
+    for (const existing of seenNorm) {
+      if (existing === normKey || (normKey.length > 20 && existing.includes(normKey)) || (existing.length > 20 && normKey.includes(existing))) {
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isDuplicate) {
+      seenNorm.add(normKey);
+      uniqueSentences.push(trimmed);
+    }
+  }
+
+  return uniqueSentences.join(' ');
+}
+
+/**
+ * Universal document extractor: Extracts clean structured text AND embedded geo-tagged photos
+ * (directly extracts genuine photo XObjects, discarding full page screenshots, logos, and tiny icons)
  */
 export async function extractDocumentContent(file: File): Promise<ExtractedDocumentResult> {
   const fileName = file.name.toLowerCase();
@@ -49,40 +94,67 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         path.startsWith('word/media/') && /\.(png|jpe?g|webp|gif|bmp)$/i.test(path)
       );
 
+      // Sort media files by file size to prioritize genuine camera/event photos
+      const mediaList: { path: string; size: number; base64: string }[] = [];
       for (const mediaPath of mediaFiles) {
         try {
           const imgFile = zip.files[mediaPath];
           if (imgFile) {
             const base64 = await imgFile.async('base64');
-            // Filter out tiny icon images (< 5KB) so only real event photos are kept
-            if (base64.length > 5000) {
-              const ext = mediaPath.split('.').pop()?.toLowerCase() || 'jpeg';
-              const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-              extractedImages.push(`data:${mimeType};base64,${base64}`);
+            // Camera photos in event reports are usually > 15KB (approx > 20,000 base64 chars)
+            // Filter out tiny icons, logos, bullets (< 15KB)
+            if (base64.length > 15000) {
+              mediaList.push({ path: mediaPath, size: base64.length, base64 });
             }
           }
         } catch (imgErr) {
-          console.warn("Could not extract DOCX image:", mediaPath, imgErr);
+          console.warn("Could not inspect DOCX media:", mediaPath, imgErr);
         }
       }
 
-      // Extract text from word/document.xml
+      // Sort largest first (typical camera/geo-tagged photos are largest in DOCX)
+      mediaList.sort((a, b) => b.size - a.size);
+
+      for (const item of mediaList.slice(0, 4)) {
+        const ext = item.path.split('.').pop()?.toLowerCase() || 'jpeg';
+        const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+        extractedImages.push(`data:${mimeType};base64,${item.base64}`);
+      }
+
+      // Extract text from word/document.xml with full table cell and paragraph structure
       const docXmlFile = zip.files['word/document.xml'];
       if (docXmlFile) {
         const xmlStr = await docXmlFile.async('string');
         const parser = new DOMParser();
         const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
 
-        const paragraphs = Array.from(xmlDoc.getElementsByTagName('w:p'));
+        // Extract both paragraphs and table structures preserving linebreaks
+        const body = xmlDoc.getElementsByTagName('w:body')[0];
         const lines: string[] = [];
 
-        paragraphs.forEach(p => {
-          const textNodes = Array.from(p.getElementsByTagName('w:t'));
-          const pText = textNodes.map(t => t.textContent || '').join('').trim();
-          if (pText.length > 0) {
-            lines.push(pText);
-          }
-        });
+        if (body) {
+          const childNodes = Array.from(body.childNodes);
+          childNodes.forEach(node => {
+            const nodeName = node.nodeName.toLowerCase();
+            if (nodeName.includes('p')) { // Paragraph
+              const texts = Array.from((node as Element).getElementsByTagName('w:t')).map(t => t.textContent || '');
+              const pText = texts.join('').trim();
+              if (pText.length > 0) lines.push(pText);
+            } else if (nodeName.includes('tbl')) { // Table
+              const rows = Array.from((node as Element).getElementsByTagName('w:tr'));
+              rows.forEach(tr => {
+                const cells = Array.from(tr.getElementsByTagName('w:tc'));
+                const cellTexts = cells.map(tc => {
+                  const tNodes = Array.from(tc.getElementsByTagName('w:t'));
+                  return tNodes.map(t => t.textContent || '').join(' ').trim();
+                }).filter(Boolean);
+                if (cellTexts.length > 0) {
+                  lines.push(cellTexts.join(' : '));
+                }
+              });
+            }
+          });
+        }
 
         const fullText = lines.join('\n');
         if (fullText.trim().length > 10) {
@@ -97,7 +169,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
     }
   }
 
-  // 2. PDF File Extraction using pdfjs-dist (Text + Cropped Geo-Tagged Event Photos ONLY)
+  // 2. PDF File Extraction using pdfjs-dist (Structured Line Text + Embedded Photo Extraction)
   if (fileName.endsWith('.pdf') || file.type === 'application/pdf') {
     try {
       const arrayBuffer = await file.arrayBuffer();
@@ -108,79 +180,187 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
 
       for (let pageNum = 1; pageNum <= numPages; pageNum++) {
         const page = await pdfDoc.getPage(pageNum);
+
+        // --- A. Structured Text Extraction with Coordinate-based Linebreaks ---
         const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .filter((str: string) => typeof str === 'string' && str.trim().length > 0)
-          .join(' ');
-        
-        if (pageText.trim()) {
-          textChunks.push(pageText.trim());
+        const items = textContent.items as Array<{
+          str: string;
+          transform: number[];
+          hasEOL?: boolean;
+          width?: number;
+          height?: number;
+        }>;
+
+        if (items && items.length > 0) {
+          // Sort items: Top to bottom (Y descending), then Left to right (X ascending)
+          const sortedItems = [...items].sort((a, b) => {
+            const yA = a.transform[5];
+            const yB = b.transform[5];
+            if (Math.abs(yA - yB) > 4) {
+              return yB - yA; // Higher Y coordinate comes first
+            }
+            return a.transform[4] - b.transform[4]; // Left to right
+          });
+
+          const pageLines: string[] = [];
+          let currentLine = '';
+          let lastY = -1;
+
+          for (const it of sortedItems) {
+            const textStr = (it.str || '').trim();
+            if (!textStr) continue;
+
+            const curY = it.transform[5];
+            if (lastY === -1) {
+              currentLine = textStr;
+              lastY = curY;
+            } else if (Math.abs(lastY - curY) > 6) {
+              // New visual line detected
+              if (currentLine.trim()) {
+                pageLines.push(currentLine.trim());
+              }
+              currentLine = textStr;
+              lastY = curY;
+            } else {
+              // Same line continuation
+              currentLine += (currentLine.endsWith(' ') || currentLine.endsWith(':') ? '' : ' ') + textStr;
+            }
+          }
+
+          if (currentLine.trim()) {
+            pageLines.push(currentLine.trim());
+          }
+
+          if (pageLines.length > 0) {
+            textChunks.push(pageLines.join('\n'));
+          }
         }
 
-        const lowerPageText = pageText.toLowerCase();
+        // --- B. Offscreen Dummy Render to Decode PDF Embedded Images ---
+        let pageCanvas: HTMLCanvasElement | null = null;
+        try {
+          const viewport = page.getViewport({ scale: 1.5 });
+          pageCanvas = document.createElement('canvas');
+          pageCanvas.width = viewport.width;
+          pageCanvas.height = viewport.height;
+          const dummyCtx = pageCanvas.getContext('2d');
+          if (dummyCtx) {
+            await page.render({ canvasContext: dummyCtx, viewport }).promise;
+          }
+        } catch (_) {}
 
-        // ONLY extract photos from pages that contain photographs (Page 2+ or explicit photo keywords), NEVER the full text document page 1!
-        if (pageNum >= 2 && extractedImages.length < 3) {
-          try {
-            const viewport = page.getViewport({ scale: 2.0 });
-            const pageCanvas = document.createElement('canvas');
-            const pageCtx = pageCanvas.getContext('2d');
-            pageCanvas.width = viewport.width;
-            pageCanvas.height = viewport.height;
-
-            if (pageCtx) {
-              await page.render({ canvasContext: pageCtx, viewport }).promise;
-
-              // If page has side-by-side photo grid (e.g. Session 2 / Geo-Tagged photo table on page 3)
-              if (lowerPageText.includes("session") || lowerPageText.includes("geo-tagged") || numPages === 3 || pageNum === 3) {
-                // Crop Left Geo-Tagged Photo
-                const crop1 = document.createElement('canvas');
-                crop1.width = Math.floor(viewport.width * 0.44);
-                crop1.height = Math.floor(viewport.height * 0.50);
-                const ctx1 = crop1.getContext('2d');
-                if (ctx1) {
-                  ctx1.drawImage(
-                    pageCanvas,
-                    viewport.width * 0.06, viewport.height * 0.08, crop1.width, crop1.height,
-                    0, 0, crop1.width, crop1.height
-                  );
-                  extractedImages.push(crop1.toDataURL('image/jpeg', 0.90));
-                }
-
-                // Crop Right Geo-Tagged Photo
-                if (extractedImages.length < 3) {
-                  const crop2 = document.createElement('canvas');
-                  crop2.width = Math.floor(viewport.width * 0.44);
-                  crop2.height = Math.floor(viewport.height * 0.50);
-                  const ctx2 = crop2.getContext('2d');
-                  if (ctx2) {
-                    ctx2.drawImage(
-                      pageCanvas,
-                      viewport.width * 0.50, viewport.height * 0.08, crop2.width, crop2.height,
-                      0, 0, crop2.width, crop2.height
-                    );
-                    extractedImages.push(crop2.toDataURL('image/jpeg', 0.90));
+        // --- C. Extract Genuine Embedded Photo XObjects from PDF ---
+        try {
+          const ops = await page.getOperatorList();
+          for (let i = 0; i < ops.fnArray.length; i++) {
+            const fn = ops.fnArray[i];
+            if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintInlineImageXObject) {
+              const imgKey = ops.argsArray[i][0];
+              if (imgKey) {
+                let imgObj: any = null;
+                try {
+                  if (page.objs && typeof (page.objs as any).get === 'function') {
+                    imgObj = await new Promise(resolve => {
+                      try {
+                        const direct = (page.objs as any).get(imgKey, (obj: any) => resolve(obj));
+                        if (direct) resolve(direct);
+                      } catch (_) {
+                        resolve(null);
+                      }
+                    });
                   }
-                }
-              } else if (lowerPageText.includes("inauguration") || pageNum === 2) {
-                // Crop Inauguration Photo from middle/lower half
-                const cropInaug = document.createElement('canvas');
-                cropInaug.width = Math.floor(viewport.width * 0.70);
-                cropInaug.height = Math.floor(viewport.height * 0.45);
-                const ctxInaug = cropInaug.getContext('2d');
-                if (ctxInaug) {
-                  ctxInaug.drawImage(
-                    pageCanvas,
-                    viewport.width * 0.15, viewport.height * 0.48, cropInaug.width, cropInaug.height,
-                    0, 0, cropInaug.width, cropInaug.height
-                  );
-                  extractedImages.push(cropInaug.toDataURL('image/jpeg', 0.90));
+                  if (!imgObj && (pdfDoc as any).commonObjs) {
+                    imgObj = (pdfDoc as any).commonObjs.get(imgKey);
+                  }
+                } catch (_) {}
+
+                if (imgObj && imgObj.width && imgObj.height) {
+                  const w = imgObj.width;
+                  const h = imgObj.height;
+                  const aspect = w / h;
+
+                  // Genuine event photos have substantial dimensions (w >= 140, h >= 100)
+                  // Exclude banner bars (aspect > 4.2), vertical lines (aspect < 0.25)
+                  if (w >= 140 && h >= 100 && aspect >= 0.35 && aspect <= 4.0) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = w;
+                    canvas.height = h;
+                    const ctx = canvas.getContext('2d');
+
+                    if (ctx) {
+                      if (imgObj.data) {
+                        const imgLen = imgObj.data.length;
+                        let imgData: ImageData;
+                        if (imgLen === w * h * 4) {
+                          // RGBA
+                          imgData = new ImageData(new Uint8ClampedArray(imgObj.data), w, h);
+                        } else if (imgLen === w * h * 3) {
+                          // RGB -> RGBA
+                          imgData = ctx.createImageData(w, h);
+                          for (let src = 0, dst = 0; src < imgLen; src += 3, dst += 4) {
+                            imgData.data[dst] = imgObj.data[src];
+                            imgData.data[dst + 1] = imgObj.data[src + 1];
+                            imgData.data[dst + 2] = imgObj.data[src + 2];
+                            imgData.data[dst + 3] = 255;
+                          }
+                        } else if (imgLen === w * h) {
+                          // Grayscale -> RGBA
+                          imgData = ctx.createImageData(w, h);
+                          for (let src = 0, dst = 0; src < imgLen; src++, dst += 4) {
+                            const val = imgObj.data[src];
+                            imgData.data[dst] = val;
+                            imgData.data[dst + 1] = val;
+                            imgData.data[dst + 2] = val;
+                            imgData.data[dst + 3] = 255;
+                          }
+                        } else {
+                          imgData = new ImageData(new Uint8ClampedArray(imgObj.data.buffer || imgObj.data), w, h);
+                        }
+                        ctx.putImageData(imgData, 0, 0);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+                        extractedImages.push(dataUrl);
+                      } else if (typeof ctx.drawImage === 'function') {
+                        ctx.drawImage(imgObj, 0, 0);
+                        const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
+                        extractedImages.push(dataUrl);
+                      }
+                    }
+                  }
                 }
               }
             }
-          } catch (renderErr) {
-            console.warn("Could not crop PDF geo-tagged photo:", renderErr);
+          }
+        } catch (imgExtractErr) {
+          console.warn("Direct embedded XObject image extraction error on page", pageNum, imgExtractErr);
+        }
+
+        // --- D. Fallback: If 0 direct XObjects on this page AND page has "Geo-Tagged Photographs", crop photo section ---
+        if (extractedImages.length === 0 && pageCanvas) {
+          const lowerPageText = (textChunks[textChunks.length - 1] || '').toLowerCase();
+          const isPhotoPage = lowerPageText.includes('geo-tagged') || 
+                              lowerPageText.includes('photograph') || 
+                              lowerPageText.includes('photo gallery') ||
+                              lowerPageText.includes('glimpses');
+
+          if (isPhotoPage) {
+            try {
+              const cropY = pageCanvas.height * 0.15;
+              const cropH = pageCanvas.height * 0.60;
+              const cropW = pageCanvas.width * 0.88;
+              const cropX = pageCanvas.width * 0.06;
+
+              const cropCanvas = document.createElement('canvas');
+              cropCanvas.width = cropW;
+              cropCanvas.height = cropH;
+              const cropCtx = cropCanvas.getContext('2d');
+              if (cropCtx) {
+                cropCtx.drawImage(pageCanvas, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+                const croppedUrl = cropCanvas.toDataURL('image/jpeg', 0.90);
+                extractedImages.push(croppedUrl);
+              }
+            } catch (cropErr) {
+              console.warn("Could not crop photo region:", cropErr);
+            }
           }
         }
       }
@@ -231,29 +411,13 @@ export async function extractTextFromDocument(file: File): Promise<string> {
 }
 
 /**
- * Clean and decode entity strings (decode HTML entities &amp;, remove bullet icons, format title casing)
- */
-function cleanEntityString(str: string): string {
-  if (!str) return "";
-  return str
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/[•\*\-]/g, ' ')
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-/**
  * Universal NLP & Heuristic Parser for Any Academic / College / Department Event Report
  */
 export function parseReportEntities(rawText: string, fileName: string, defaultDepartment: string = "Information Technology"): ParsedReportData {
   const cleanName = fileName.replace(/\.[^/.]+$/, "").replace(/[_\-+]/g, ' ').trim();
   let text = (rawText || cleanName).replace(/\r\n/g, '\n').trim();
 
-  // 1. Strip binary zip debris and template headers
+  // 1. Clean binary/ZIP debris and standard institutional metadata templates
   text = text.replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/i, '').trim();
 
   const sanitizedText = text
@@ -288,118 +452,157 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
   // 3. Robust Event Title Extraction
   let title = "";
   const titlePatterns = [
-    /Event\s+Title\s*[:\-\s]*([^\n\r]+?)(?=\s*(?:Organizing\s+Body|Collaborations|Details\s+of|Resource\s+Person|Speaker|Organizing\s+Department|Event\s+Date|Date|Venue|Time|\n\n|$))/i,
-    /CAMPUS\s+TO\s+CAREER\s+SERIES[^\n\r]+/i,
-    /(?:Title\s+of\s+the\s+Event|Name\s+of\s+the\s+Event|Topic|Theme|Project\s+Title|Paper\s+Title)\s*[:\-\s]*([^\n\r]+)/i,
-    /Report\s+on\s+([^\n\r]+)/i,
-    /(?:Two|One)[- ]Day\s+(?:National|International|Hands[- ]on)?\s+(?:Workshop|Seminar|Conference|Symposium|FDP)\s+on\s+([^\n\r]+)/i
+    /(?:Event Title|Title of the Event|Name of the Event|Topic|Theme|Project Title|Paper Title|Event Name)\s*[:\-\s]*\s*([^\n\r]+?)(?=\s*(?:Organizing Body|Collaborations|Details of|Resource Person|Speaker|Organizing Department|Nature of|Event Date|Date|Venue|Time|\n\n|$))/i,
+    /CAMPUS TO CAREER SERIES[^\n\r]*/i,
+    /Guest Lecture on\s+([^\n\r]+)/i,
+    /Workshop on\s+([^\n\r]+)/i,
+    /Seminar on\s+([^\n\r]+)/i,
+    /Orientation Program on\s+([^\n\r]+)/i,
+    /Two[- ]Day\s+(?:National|International|Hands[- ]on)?\s+(?:Workshop|Seminar|Conference|Symposium|FDP)\s+on\s+([^\n\r]+)/i,
+    /One[- ]Day\s+(?:National|International|Hands[- ]on)?\s+(?:Workshop|Seminar|Conference|Symposium|FDP)\s+on\s+([^\n\r]+)/i,
+    /Placement Drive by\s+([^\n\r]+)/i
   ];
 
   for (const regex of titlePatterns) {
     const m = sanitizedText.match(regex);
     if (m && m[1] && m[1].trim().length > 4) {
-      title = cleanEntityString(m[1]).replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
-      break;
-    } else if (m && m[0] && m[0].trim().length > 4) {
-      title = cleanEntityString(m[0]).replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
-      break;
-    }
-  }
-
-  if (!title || title.length < 5 || title.includes("[CONTENT_TYPES]") || title.includes("VERSION:")) {
-    const lines = sanitizedText.split('\n').map(l => l.trim()).filter(l => 
-      l.length > 8 && l.length < 110 && 
-      !l.toLowerCase().startsWith("date") && 
-      !l.toLowerCase().startsWith("venue") &&
-      !l.toLowerCase().startsWith("time") &&
-      !l.toLowerCase().startsWith("kpr") &&
-      !l.toLowerCase().startsWith("page")
-    );
-    title = lines.length > 0 ? cleanEntityString(lines[0]) : cleanName;
-  }
-
-  title = title.toUpperCase().replace(/\s+/g, ' ').trim();
-
-  // 4. Precise Resource Person / Chief Guest / Speaker Extraction (Handling multi-line table layouts)
-  let student = "";
-  
-  // Match "Details of Resource Person" across table cells or multiple lines
-  const resPersonBlockMatch = sanitizedText.match(/Details\s+of\s+Resource[\s\n\r]+Person[\s\n\r:]+([\s\S]*?)(?=(?:Organizing\s+Department|Event\s+Date|Date|Venue|Time|Total\s+number|Purpose|\n\n|$))/i);
-  if (resPersonBlockMatch && resPersonBlockMatch[1] && resPersonBlockMatch[1].trim().length > 3) {
-    const rawBlock = resPersonBlockMatch[1].trim();
-    // Clean up lines and join them with commas (e.g. "Ms. Madhumathi R, Campus to Career Lead, Educationist - Founder & CEO, LiLa Learning Space")
-    const lines = rawBlock.split('\n').map(l => cleanEntityString(l)).filter(l => l.length > 0);
-    student = lines.join(', ');
-  }
-
-  if (!student) {
-    const speakerPatterns = [
-      /Resource\s+person(?:\s+of\s+the\s+session)?[\s\n\r:]+([^\n\r,]+(?:\s*,\s*[^\n\r.]+){1,3})/i,
-      /Chief\s+guest(?:\s+of\s+the\s+day)?[\s\n\r:]+([^\n\r,]+(?:\s*,\s*[^\n\r.]+){1,3})/i,
-      /(?:Keynote\s+Speaker|Speaker|Trainer|Expert|Delivered\s+by|Presented\s+by)[\s\n\r:]+([^\n\r]+)/i,
-      /Ms\.\s+Madhumathi\s+R[^\n\r.]*(?:[\n\r]+[^\n\r]+){0,2}/i,
-      /(?:Ms\.|Mr\.|Dr\.|Prof\.)\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:\s*,\s*[^\n\r.]+)?/
-    ];
-
-    for (const regex of speakerPatterns) {
-      const m = sanitizedText.match(regex);
-      if (m && m[1] && m[1].trim().length > 3) {
-        student = cleanEntityString(m[1]);
+      const candidate = m[1].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
+      if (!candidate.toLowerCase().includes("example report") && !candidate.toLowerCase().includes("quality system") && !candidate.toLowerCase().includes("report of the event")) {
+        title = candidate;
         break;
-      } else if (m && m[0] && m[0].trim().length > 3) {
-        student = cleanEntityString(m[0]);
+      }
+    } else if (m && m[0] && m[0].trim().length > 4) {
+      const candidate = m[0].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
+      if (!candidate.toLowerCase().includes("example report") && !candidate.toLowerCase().includes("quality system") && !candidate.toLowerCase().includes("report of the event")) {
+        title = candidate;
         break;
       }
     }
   }
 
-  if (!student || student.toLowerCase().includes("distinguished")) {
-    student = category === 'placement' ? "Placement Cell & Industry Partners" :
-              category === 'student' ? "Student Innovation Achievers" :
-              category === 'faculty' ? "Department Faculty Researchers" : "Distinguished Resource Person";
+  // Check if title is missing or contains placeholder artifact words
+  const isGenericTitle = !title || 
+    title.length < 5 || 
+    title.toLowerCase().includes("example report") || 
+    title.toLowerCase().includes("quality system document") || 
+    title.toLowerCase().includes("report of the event") || 
+    title.includes("[CONTENT_TYPES]") || 
+    title.includes("VERSION:");
+
+  if (isGenericTitle) {
+    const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on)\s+["']?([^"'\n\r\.]+)/i) ||
+                       sanitizedText.match(/(?:CAMPUS TO CAREER SERIES[^\n\r]*)/i) ||
+                       sanitizedText.match(/(?:Topic|Theme|Subject)\s*[:\-\s]*\s*([^\n\r]+)/i);
+    if (topicMatch && (topicMatch[1] || topicMatch[0])) {
+      title = (topicMatch[1] || topicMatch[0]).trim().replace(/^["']|["']$/g, '');
+    } else {
+      const lines = sanitizedText.split('\n').map(l => l.trim()).filter(l => 
+        l.length > 8 && l.length < 110 && 
+        !l.toLowerCase().includes("example report") &&
+        !l.toLowerCase().includes("quality system") &&
+        !l.toLowerCase().includes("report of the event") &&
+        !l.toLowerCase().includes("version:") &&
+        !l.toLowerCase().startsWith("date") && 
+        !l.toLowerCase().startsWith("venue") &&
+        !l.toLowerCase().startsWith("time") &&
+        !l.toLowerCase().startsWith("kpr") &&
+        !l.toLowerCase().startsWith("page")
+      );
+      title = lines.length > 0 ? lines[0] : (cleanName.toLowerCase().includes("example") ? "Academic Skill Initiative" : cleanName);
+    }
   }
 
-  // 5. Extract Dignitaries (Principal, Dean, HOD)
+  title = title.toUpperCase().replace(/\s+/g, ' ').trim();
+
+  // 4. Resource Person / Chief Guest / Speaker / Subject Expert
+  let student = "";
+  
+  // A. Block-level search for "Details of Resource Person" or "Resource Person Details"
+  const resourceBlockMatch = sanitizedText.match(
+    /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert)\s*[:\-\s]*\s*([\s\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|\n\s*\n|$))/i
+  );
+
+  if (resourceBlockMatch && resourceBlockMatch[1]) {
+    let candidate = resourceBlockMatch[1]
+      .replace(/[\r\n]+/g, ', ')
+      .replace(/\s+/g, ' ')
+      .replace(/^[:\-\s,]+/, '')
+      .replace(/[:\-\s,]+$/, '')
+      .trim();
+
+    candidate = candidate.replace(/^Name\s*:\s*/i, '').trim();
+
+    if (candidate.length > 3 && 
+        !candidate.toLowerCase().startsWith("date") && 
+        !candidate.toLowerCase().startsWith("seminar") && 
+        !candidate.toLowerCase().startsWith("department") && 
+        !candidate.toLowerCase().includes("distinguished resource person")) {
+      student = candidate;
+    }
+  }
+
+  // B. Search for explicit honorific titles (Dr. / Mr. / Ms. / Mrs. / Prof.) in the document
+  if (!student || student.length < 4) {
+    const honorificMatches = sanitizedText.match(/(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]+)+(?:,\s*[A-Za-z\s\-&]+)?/g);
+    if (honorificMatches && honorificMatches.length > 0) {
+      const filtered = honorificMatches.filter(h => 
+        !h.toLowerCase().includes("geetha") && 
+        !h.toLowerCase().includes("sharmila") &&
+        !h.toLowerCase().includes("principal") &&
+        !h.toLowerCase().includes("dean")
+      );
+      if (filtered.length > 0) {
+        student = filtered[0].trim();
+      }
+    }
+  }
+
+  // Clean trailing commas / formatting
+  if (student) {
+    student = student.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
+  }
+
+  // 5. Extract Dignitaries (Principal, Dean, HOD, Patron)
   let principalName = "Dr. P. Geetha (Principal, KPRCAS)";
-  const princMatch = sanitizedText.match(/(?:presided over by|Principal[,\s:]+)\s*([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:[,\s]+Principal[^\n\r,.]*)?)/i) ||
-                     sanitizedText.match(/(?:Dr\.\s+P\.\s+Geetha[^\n\r,.]*)/i);
-  if (princMatch) {
-    principalName = cleanEntityString(princMatch[0].replace(/presided over by/i, ''));
+  const princMatch = sanitizedText.match(/(?:Dr\.\s+P\.\s+Geetha)/i) ||
+                     sanitizedText.match(/(?:presided over by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Principal)?)/i);
+  if (princMatch && princMatch[1]) {
+    principalName = princMatch[1].trim();
   }
 
   let deanName = "Dr. P. Sharmila (Dean – SoCS)";
-  const deanMatch = sanitizedText.match(/(?:felicitated by|Dean[,\s:]+)\s*([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:[,\s]+Dean[^\n\r,.]*)?)/i) ||
-                    sanitizedText.match(/(?:Dr\.\s+P\.\s+Sharmila[^\n\r,.]*)/i);
-  if (deanMatch) {
-    deanName = cleanEntityString(deanMatch[0].replace(/felicitated by/i, ''));
+  const deanMatch = sanitizedText.match(/(?:Dr\.\s+P\.\s+Sharmila)/i) ||
+                    sanitizedText.match(/(?:felicitated by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Dean)?)/i);
+  if (deanMatch && deanMatch[1]) {
+    deanName = deanMatch[1].trim();
   }
 
   let hodName = "";
   const hodMatch = sanitizedText.match(/(?:Head of the Department|HOD)[,\s:]+([A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+)/i);
-  if (hodMatch) {
-    hodName = cleanEntityString(hodMatch[1]);
+  if (hodMatch && hodMatch[1]) {
+    hodName = hodMatch[1].trim();
   }
 
   // 6. Student Organizers / Anchors / Vote of Thanks
   let studentAnchors = "";
   const anchorMatches = sanitizedText.match(/(?:Ms\.|Mr\.)\s+[A-Z][a-z\.\s]+,\s*(?:I|II|III|IV)\s+(?:IT|B\.Sc|BCA|CS|Commerce)[^\n.]*/gi);
   if (anchorMatches && anchorMatches.length > 0) {
-    studentAnchors = anchorMatches.map(a => cleanEntityString(a)).join(', ');
+    studentAnchors = anchorMatches.join(', ');
   }
 
   // 7. Extract Class & Department
   let classDept = "";
-  const deptMatch = sanitizedText.match(/(?:Organizing\s+Department|Department\s+of|Dept\.\s+of)[:\s]+([^\n\r]+)/i);
+  const deptMatch = sanitizedText.match(/(?:Organizing Department|Department of|Dept\. of)[:\s]+([^\n\r]+)/i);
   if (deptMatch && deptMatch[1]) {
-    const deptFound = cleanEntityString(deptMatch[1]);
-    if (!deptFound.toLowerCase().startsWith("date")) {
+    const deptFound = deptMatch[1].trim();
+    if (!deptFound.toLowerCase().startsWith("date") && !deptFound.toLowerCase().startsWith("venue")) {
       classDept = deptFound.toUpperCase();
     }
   }
   if (!classDept) {
     const classPatternMatch = sanitizedText.match(/(?:II|III|I|IV)\s+(?:IT|B\.Sc|BCA|CS|B\.Sc\.\s+IT)[^,\n.]*/i);
     if (classPatternMatch) {
-      classDept = cleanEntityString(classPatternMatch[0]).toUpperCase();
+      classDept = classPatternMatch[0].trim().toUpperCase();
     } else {
       classDept = `DEPARTMENT OF ${defaultDepartment.toUpperCase()}`;
     }
@@ -407,19 +610,19 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
 
   // 8. Extract Team Name / Collaborations / Sponsoring Agency
   let teamName = "";
-  const collabMatch = sanitizedText.match(/(?:Collaborations|Organizing\s+Body|Sponsored\s+by|Association|Club|In\s+Association\s+with)(?:\s*\(If any\))?[:\s]+([^\n\r]+)/i);
-  if (collabMatch && collabMatch[1] && collabMatch[1].trim().length > 3 && !collabMatch[1].includes("-")) {
-    teamName = cleanEntityString(collabMatch[1]);
+  const collabMatch = sanitizedText.match(/(?:Collaborations|Organizing Body|Sponsored by|Association|Club|In Association with)(?:\s*\(If any\))?[:\s]+([^\n\r]+)/i);
+  if (collabMatch && collabMatch[1] && collabMatch[1].trim().length > 3 && !collabMatch[1].includes("-") && !collabMatch[1].toLowerCase().startsWith("nil")) {
+    teamName = collabMatch[1].trim();
   } else {
     const teamMatch = sanitizedText.match(/(?:team name:?|team:?|team name is)\s*([^.,;\n]{2,50})/i);
     if (teamMatch) {
-      teamName = cleanEntityString(teamMatch[1]).replace(/^["']|["']$/g, '');
+      teamName = teamMatch[1].trim().replace(/^["']|["']$/g, '');
     }
   }
 
-  // 9. Extract Event Date (Explicitly filtering out template version date 18/02/2022)
-  let date = "20/08/2025";
-  const dateMatch = sanitizedText.match(/(?:Event\s+Date|Date\s+of\s+the\s+Event|Date)[:\s]+([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i) ||
+  // 9. Extract Event Date (Filters out template version date 18/02/2022)
+  let date = "August 2025";
+  const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)[:\s]+([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i) ||
                     sanitizedText.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/);
   if (dateMatch) {
     const foundDate = (dateMatch[1] || dateMatch[0]).trim();
@@ -432,89 +635,86 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
   let venue = "Seminar Hall";
   const venueMatch = sanitizedText.match(/Venue[:\s]+([^\n\r,]+)/i);
   if (venueMatch && venueMatch[1]) {
-    venue = cleanEntityString(venueMatch[1]);
+    venue = venueMatch[1].trim();
   }
 
   let participantInfo = "";
-  const partMatch = sanitizedText.match(/(?:Total\s+number\s+of\s+Students\s+Participated|Participants\s+Count|Total\s+Beneficiaries|Attendance)[:\s]+(\d+)/i);
+  const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Attendance)[:\s]+(\d+)/i);
   if (partMatch) {
-    participantInfo = `with active participation from over ${partMatch[1]} students`;
+    participantInfo = `with active participation from over ${partMatch[1]} students and faculty members`;
   }
 
   // 11. Extract Purpose, Summary & Outcome
   let purpose = "";
-  const purposeMatch = sanitizedText.match(/(?:Purpose\s+of\s+the\s+Event|Objective\(s\)?|Aim\s+of\s+the\s+Event|Abstract)[:\s]+([\s\S]*?)(?=Summary\s+of\s+the\s+Event|Outcome\s+of\s+the\s+Event|Date|Venue|Proceedings|$)/i);
+  const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Objective\(s\)?|Aim of the Event|Abstract)[:\s]+([\s\S]*?)(?=Summary of the Event|Outcome of the Event|Date|Venue|Proceedings|$)/i);
   if (purposeMatch && purposeMatch[1]) {
-    purpose = cleanEntityString(purposeMatch[1]);
+    purpose = purposeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let summary = "";
-  const summaryMatch = sanitizedText.match(/(?:Summary\s+of\s+the\s+Event|Proceedings|Event\s+Description|Executive\s+Summary)[:\s]+([\s\S]*?)(?=Outcome\s+of\s+the\s+Event|Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const summaryMatch = sanitizedText.match(/(?:Summary of the Event|Proceedings|Event Description|Executive Summary)[:\s]+([\s\S]*?)(?=Outcome of the Event|Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
   if (summaryMatch && summaryMatch[1]) {
-    summary = cleanEntityString(summaryMatch[1]);
+    summary = summaryMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let outcome = "";
-  const outcomeMatch = sanitizedText.match(/(?:Outcome\s+of\s+the\s+Event|Key\s+Outcomes|Feedback\s+&\s+Conclusion|Results)[:\s]+([\s\S]*?)(?=Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const outcomeMatch = sanitizedText.match(/(?:Outcome of the Event|Key Outcomes|Feedback & Conclusion|Results)[:\s]+([\s\S]*?)(?=Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
   if (outcomeMatch && outcomeMatch[1]) {
-    outcome = cleanEntityString(outcomeMatch[1]);
+    outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   const award = teamName ? `Collaboration: ${teamName}` : `Department Academic Initiative`;
-  const host = `${principalName} and ${deanName}${hodName ? `, with ${hodName} (HOD)` : ''}`;
+  const host = `${principalName} & ${deanName}${hodName ? `, ${hodName} (HOD)` : ''}`;
   const details = purpose || summary || sanitizedText.substring(0, 300);
   const keywords = outcome ? outcome.substring(0, 200) : "Skill enhancement, technical capability, executive presentation, student participation";
 
-  // 12. Synthesize Authentic, Non-Repetitive College Newsletter Article Narrative
+  // 12. Synthesize Cohesive, Publication-Grade, Non-Repetitive College Article Story
   const sentences: string[] = [];
 
-  // Opening Lead sentence
-  const leadParts = [
-    `The ${classDept || `Department of ${defaultDepartment}`}, KPRCAS,`,
-    teamName ? `in collaboration with ${teamName},` : '',
-    `successfully organized the academic capability program titled "${title}"`,
-    date ? `on ${date}` : '',
-    venue ? `at the ${venue}` : '',
-    participantInfo ? `(${participantInfo})` : '',
-    '.'
-  ].filter(Boolean);
-  sentences.push(leadParts.join(' ').replace(/\s+,/g, ',').replace(/\s+\./g, '.'));
+  // Sentence 1: Lead opening
+  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `DEPARTMENT OF ${classDept}`) : `DEPARTMENT OF ${defaultDepartment.toUpperCase()}`;
+  sentences.push(
+    `The ${deptDisplayName}, KPRCAS, ${teamName ? `in collaboration with ${teamName}, ` : ''}successfully organized the academic capability program titled "${title}" on ${date} at the ${venue}${participantInfo ? ` ${participantInfo}` : ''}.`
+  );
 
-  // Dignitaries & Speaker introduction (Clean, authentic, no duplicates)
-  if (student && !student.toLowerCase().includes("distinguished")) {
+  // Sentence 2: Resource Person / Dignitaries
+  if (student) {
     sentences.push(
-      `The session was presided over by ${principalName} and felicitated by ${deanName}. Eminent Resource Person ${student} delivered an empowering address.`
+      `The session featured eminent Resource Person ${student}, who delivered an empowering keynote address and shared valuable practical insights with the attendees.`
     );
   } else {
     sentences.push(
-      `The session was presided over by ${principalName} and felicitated by ${deanName}.`
+      `The program was presided over by ${principalName} and felicitated by ${deanName}.`
     );
   }
 
-  // Student Coordinators / Anchors
-  if (studentAnchors) {
-    sentences.push(`Student coordinators (${studentAnchors}) actively welcomed the gathering and anchored the event proceedings.`);
-  }
-
-  // Core Purpose
-  if (purpose && purpose.length > 10) {
-    const cleanPurp = purpose.replace(/^(to\s+)+/i, '');
-    sentences.push(`The primary objective was to ${cleanPurp.charAt(0).toLowerCase() + cleanPurp.slice(1)}.`);
-  }
-
-  // Key Outcomes or Summary highlights
-  if (outcome && outcome.length > 10) {
-    sentences.push(`Key outcomes achieved: ${outcome}.`);
-  } else if (summary && summary.length > 10) {
+  // Sentence 3: Purpose / Session Core (use actual summary if available, avoiding duplicate intro)
+  if (summary && summary.length > 20) {
     sentences.push(summary);
+  } else if (purpose && purpose.length > 15) {
+    const cleanPurp = purpose.toLowerCase().startsWith('to ') ? purpose : `to ${purpose}`;
+    sentences.push(`The core objective of the program was ${cleanPurp}.`);
   }
 
-  // Leadership appreciation
+  // Sentence 4: Key Outcomes & Vote of thanks
+  if (outcome && outcome.length > 15) {
+    sentences.push(`Key outcomes achieved: ${outcome}.`);
+  } else {
+    sentences.push(`The interactive session enabled participants to gain practical knowledge, build industry-ready skills, and develop greater academic excellence.`);
+  }
+
+  if (studentAnchors) {
+    sentences.push(`Student coordinators (${studentAnchors}) actively coordinated the proceedings.`);
+  }
+
+  // Sentence 5: Concluding appreciation
   sentences.push(
-    `The Principal, Dean, and Department Faculty members warmly commended all organizers, resource delegates, and student participants for their exemplary commitment and grand success.`
+    `The Principal, Dean, and Department Faculty members warmly commended all organizers, resource delegates, and student participants for making the event a grand success.`
   );
 
-  const article = sentences.join(' ').replace(/\s+/g, ' ').trim();
+  // Apply strict sentence deduplication
+  const rawArticle = sentences.join(' ');
+  const article = deduplicateSentences(rawArticle);
 
   return {
     category,

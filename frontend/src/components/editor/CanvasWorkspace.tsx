@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { useEditor } from '../../context/EditorContext';
+import { useEditor, ensureCanonicalPageStructure } from '../../context/EditorContext';
 import { CanvasElement } from '../../types/editor';
 import { Sparkles, Wand2, X } from 'lucide-react';
 
@@ -676,7 +676,8 @@ const CanvasWorkspace: React.FC<{
       >
         {(activeProject.pages || []).map((page, index) => {
           const isActive = page.id === activePageId;
-          const pageElements = page.elements || [];
+          const canonicalPage = ensureCanonicalPageStructure(page, index + 1, activeProject.department || "Information Technology");
+          const pageElements = canonicalPage.elements || [];
           return (
             <div
               key={page.id || index}

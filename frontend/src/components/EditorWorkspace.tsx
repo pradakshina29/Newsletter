@@ -21,9 +21,10 @@ interface EditorWorkspaceProps {
   onClose: () => void;
   darkMode: boolean;
   toggleDarkMode: () => void;
+  initialPdfFile?: File | null;
 }
 
-const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onClose, darkMode, toggleDarkMode }) => {
+const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onClose, darkMode, toggleDarkMode, initialPdfFile }) => {
   const { showSuccess, showError, showWarning } = useNotification();
   const {
     activeProject,
@@ -47,8 +48,8 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
   const [activeMode, setActiveMode] = useState<'content' | 'customize' | 'ai'>('content');
   const [isSplitViewOpen, setIsSplitViewOpen] = useState<boolean>(false);
   const [splitUploadedFile, setSplitUploadedFile] = useState<File | null>(null);
-  const [isPdfImportMode, setIsPdfImportMode] = useState<boolean>(false);
-  const [pdfImportFile, setPdfImportFile] = useState<File | null>(null);
+  const [isPdfImportMode, setIsPdfImportMode] = useState<boolean>(!!initialPdfFile);
+  const [pdfImportFile, setPdfImportFile] = useState<File | null>(initialPdfFile || null);
   const splitFileInputRef = React.useRef<HTMLInputElement>(null);
   const [verifyingLayout, setVerifyingLayout] = useState<boolean>(false);
   const [exporting, setExporting] = useState<boolean>(false);

@@ -159,3 +159,58 @@ export const renderPdfPages = async (file: File): Promise<PDFPageObject[]> => {
     throw error;
   }
 };
+
+/**
+ * Precision canvas cropping utility to cleanly divide a PDF page into
+ * top and bottom portions based on a split percentage (0-100%).
+ */
+export const slicePdfPageCanvas = (
+  dataUrl: string,
+  splitPercentage: number = 50
+): Promise<{ topDataUrl: string; bottomDataUrl: string }> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const splitFrac = Math.max(0.1, Math.min(0.9, splitPercentage / 100));
+      const topHeight = Math.round(img.height * splitFrac);
+      const bottomHeight = img.height - topHeight;
+
+      // 1. Render Top Portion
+      const topCanvas = document.createElement('canvas');
+      topCanvas.width = img.width;
+      topCanvas.height = topHeight;
+      const topCtx = topCanvas.getContext('2d');
+      if (!topCtx) {
+        reject(new Error('Failed to create top canvas context'));
+        return;
+      }
+      topCtx.drawImage(
+        img,
+        0, 0, img.width, topHeight,
+        0, 0, img.width, topHeight
+      );
+      const topDataUrl = topCanvas.toDataURL('image/png');
+
+      // 2. Render Bottom Portion
+      const bottomCanvas = document.createElement('canvas');
+      bottomCanvas.width = img.width;
+      bottomCanvas.height = bottomHeight;
+      const bottomCtx = bottomCanvas.getContext('2d');
+      if (!bottomCtx) {
+        reject(new Error('Failed to create bottom canvas context'));
+        return;
+      }
+      bottomCtx.drawImage(
+        img,
+        0, topHeight, img.width, bottomHeight,
+        0, 0, img.width, bottomHeight
+      );
+      const bottomDataUrl = bottomCanvas.toDataURL('image/png');
+
+      resolve({ topDataUrl, bottomDataUrl });
+    };
+    img.onerror = (err) => reject(err);
+    img.src = dataUrl;
+  });
+};
