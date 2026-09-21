@@ -476,7 +476,7 @@ const CanvasWorkspace: React.FC<{
       height: el.height,
       opacity: (el.opacity !== undefined && !isNaN(Number(el.opacity)) ? Number(el.opacity) : 100) / 100,
       transform: `rotate(${el.rotation || 0}deg)`,
-      zIndex: el.zIndex !== undefined ? el.zIndex : (el.id?.endsWith('_bg') || el.id === 'bg' ? 0 : el.id?.includes('_hdr') || el.id?.includes('hdr_') || el.id?.includes('footer') ? 10 : 2),
+      zIndex: el.zIndex !== undefined ? el.zIndex : (el.id?.endsWith('_bg') || el.id === 'bg' ? 0 : el.id?.includes('_hdr') || el.id?.includes('hdr_') || el.id?.includes('footer') ? 50 : 2),
     };
 
     const innerContent = () => {
