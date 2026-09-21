@@ -467,13 +467,25 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
     const m = sanitizedText.match(regex);
     if (m && m[1] && m[1].trim().length > 4) {
       const candidate = m[1].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
-      if (!candidate.toLowerCase().includes("example report") && !candidate.toLowerCase().includes("quality system") && !candidate.toLowerCase().includes("report of the event")) {
+      const candLower = candidate.toLowerCase();
+      if (!candLower.includes("example report") && 
+          !candLower.includes("quality system") && 
+          !candLower.includes("report of the event") &&
+          !candLower.startsWith("department of") &&
+          !candLower.startsWith("dept. of") &&
+          !candLower.startsWith("school of")) {
         title = candidate;
         break;
       }
     } else if (m && m[0] && m[0].trim().length > 4) {
       const candidate = m[0].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
-      if (!candidate.toLowerCase().includes("example report") && !candidate.toLowerCase().includes("quality system") && !candidate.toLowerCase().includes("report of the event")) {
+      const candLower = candidate.toLowerCase();
+      if (!candLower.includes("example report") && 
+          !candLower.includes("quality system") && 
+          !candLower.includes("report of the event") &&
+          !candLower.startsWith("department of") &&
+          !candLower.startsWith("dept. of") &&
+          !candLower.startsWith("school of")) {
         title = candidate;
         break;
       }
@@ -486,13 +498,15 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
     title.toLowerCase().includes("example report") || 
     title.toLowerCase().includes("quality system document") || 
     title.toLowerCase().includes("report of the event") || 
+    title.toLowerCase().startsWith("department of") ||
+    title.toLowerCase().startsWith("dept. of") ||
     title.includes("[CONTENT_TYPES]") || 
     title.includes("VERSION:");
 
   if (isGenericTitle) {
     const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on)\s+["']?([^"'\n\r\.]+)/i) ||
                        sanitizedText.match(/(?:CAMPUS TO CAREER SERIES[^\n\r]*)/i) ||
-                       sanitizedText.match(/(?:Topic|Theme|Subject)\s*[:\-\s]*\s*([^\n\r]+)/i);
+                       sanitizedText.match(/(?:Topic|Theme|Subject|Event Name|Title)\s*[:\-\s]*\s*([^\n\r]+)/i);
     if (topicMatch && (topicMatch[1] || topicMatch[0])) {
       title = (topicMatch[1] || topicMatch[0]).trim().replace(/^["']|["']$/g, '');
     } else {
@@ -502,6 +516,9 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
         !l.toLowerCase().includes("quality system") &&
         !l.toLowerCase().includes("report of the event") &&
         !l.toLowerCase().includes("version:") &&
+        !l.toLowerCase().startsWith("department of") &&
+        !l.toLowerCase().startsWith("dept. of") &&
+        !l.toLowerCase().startsWith("school of") &&
         !l.toLowerCase().startsWith("date") && 
         !l.toLowerCase().startsWith("venue") &&
         !l.toLowerCase().startsWith("time") &&
@@ -514,12 +531,12 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
 
   title = title.toUpperCase().replace(/\s+/g, ' ').trim();
 
-  // 4. Resource Person / Chief Guest / Speaker / Subject Expert
+  // 4. Resource Person / Chief Guest / Speaker / Subject Expert / Student Achievers
   let student = "";
   
-  // A. Block-level search for "Details of Resource Person" or "Resource Person Details"
+  // A. Block-level search for "Details of Resource Person", "Resource Person", "Student(s)", "Winners", etc.
   const resourceBlockMatch = sanitizedText.match(
-    /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert)\s*[:\-\s]*\s*([\s\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|\n\s*\n|$))/i
+    /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert|Student\(s\)?|Student Name|Students|Winners|Team Members|Recruiter|Company)\s*[:\-\s]*\s*([\s\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|Achievement|Journal|Package|Count|\n\s*\n|$))/i
   );
 
   if (resourceBlockMatch && resourceBlockMatch[1]) {
@@ -538,6 +555,19 @@ export function parseReportEntities(rawText: string, fileName: string, defaultDe
         !candidate.toLowerCase().startsWith("department") && 
         !candidate.toLowerCase().includes("distinguished resource person")) {
       student = candidate;
+    }
+  }
+
+  // A2. Single-line direct match fallback
+  if (!student || student.length < 3) {
+    const singleLineMatch = sanitizedText.match(
+      /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert|Student\(s\)?|Student Name|Students|Winners|Team Members|Recruiter|Company)\s*[:\-\s]+\s*([^\n\r]+)/i
+    );
+    if (singleLineMatch && singleLineMatch[1]) {
+      const cand = singleLineMatch[1].trim();
+      if (cand.length > 3 && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("venue") && !cand.toLowerCase().startsWith("department")) {
+        student = cand;
+      }
     }
   }
 
