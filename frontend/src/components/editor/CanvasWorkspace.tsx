@@ -21,24 +21,24 @@ const TextElementComponent: React.FC<{
     <div
       ref={divRef}
       id={el.id}
-      contentEditable={true}
+      contentEditable={!el.locked}
       suppressContentEditableWarning={true}
-      onFocus={() => onSelect()}
+      onFocus={() => !el.locked && onSelect()}
       onClick={(e) => {
         e.stopPropagation();
-        onSelect();
+        if (!el.locked) onSelect();
       }}
       onBlur={() => {
-        if (divRef.current) {
+        if (!el.locked && divRef.current) {
           onUpdate(el.id, divRef.current.innerText);
         }
       }}
       onInput={() => {
-        if (divRef.current) {
+        if (!el.locked && divRef.current) {
           onUpdate(el.id, divRef.current.innerText);
         }
       }}
-      className={`w-full h-full focus:outline-none cursor-text ${isSelected ? 'ring-1 ring-primary/60 bg-blue-50/10' : 'hover:bg-blue-50/5'}`}
+      className={`w-full h-full focus:outline-none ${el.locked ? 'cursor-default select-none' : 'cursor-text'} ${isSelected && !el.locked ? 'ring-1 ring-primary/60 bg-blue-50/10' : !el.locked ? 'hover:bg-blue-50/5' : ''}`}
       style={{
         fontSize: el.fontSize,
         fontFamily: el.fontFamily,
@@ -474,9 +474,9 @@ const CanvasWorkspace: React.FC<{
       top: el.y,
       width: el.width,
       height: el.height,
-      opacity: el.opacity / 100,
-      transform: `rotate(${el.rotation}deg)`,
-      zIndex: el.zIndex || 1,
+      opacity: (el.opacity !== undefined && !isNaN(Number(el.opacity)) ? Number(el.opacity) : 100) / 100,
+      transform: `rotate(${el.rotation || 0}deg)`,
+      zIndex: el.zIndex !== undefined ? el.zIndex : (el.id?.endsWith('_bg') || el.id === 'bg' ? 0 : el.id?.includes('_hdr') || el.id?.includes('hdr_') || el.id?.includes('footer') ? 10 : 2),
     };
 
     const innerContent = () => {
