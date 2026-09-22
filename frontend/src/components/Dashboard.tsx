@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserSession, ProjectData } from '../types/editor';
 import { useNotification } from '../context/NotificationContext';
-import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles, Shield, Edit, Edit3, Eye, Save, Layers, Copy, Trash2, Folder, ExternalLink, Sun, Moon, Upload } from 'lucide-react';
+import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles, Shield, Edit, Edit3, Eye, Save, Layers, Copy, Trash2, Folder, ExternalLink, Sun, Moon } from 'lucide-react';
 
 interface DashboardProps {
   user: UserSession;
@@ -124,7 +124,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   const [showCreateModal, setShowCreateModal] = useState<boolean>(false);
   const [newProjectName, setNewProjectName] = useState<string>('');
   const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
-  const pdfUploadRef = useRef<HTMLInputElement>(null);
 
   const handleOpenCreateModal = () => {
     setNewProjectName('');
@@ -165,17 +164,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   const [analyzedResult, setAnalyzedResult] = useState<any>(null);
   const [selectedTemplateRecId, setSelectedTemplateRecId] = useState<string | null>(null);
   const [aiGenerating, setAiGenerating] = useState<boolean>(false);
-
-  // Raw Content Intermediate Modal States
-  const [showRawContentModal, setShowRawContentModal] = useState<boolean>(false);
-  const [rawContentFileName, setRawContentFileName] = useState<string>('');
-  const [extractedArticles, setExtractedArticles] = useState<Array<{
-    title: string;
-    category: string;
-    content: string;
-    images: string[];
-  }>>([]);
-  const [isPopulatingNewsletter, setIsPopulatingNewsletter] = useState<boolean>(false);
 
   // Fetch projects and templates from Spring Boot backend
   const fetchData = async () => {
@@ -642,276 +630,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
   };
 
 
-
-  const parseRawTextToArticles = (rawText: string, fileName: string) => {
-    const cleanText = rawText
-      .replace(/Producer|Creator|ModDate|CreationDate|WPS Docs|Adobe|MediaBox|endstream|FlateDecode|Catalog|Pages|Type \/Pages/gi, '')
-      .replace(/\r/g, '')
-      .trim();
-
-    const lines = cleanText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-    const articles: Array<{ title: string; category: string; content: string; images: string[] }> = [];
-
-    let currentTitle = "";
-    let currentCategory = "Department Highlights";
-    let currentParagraphs: string[] = [];
-
-    const detectCategory = (str: string): string => {
-      const lower = str.toLowerCase();
-      if (lower.includes("achievement") || lower.includes("award") || lower.includes("winner") || lower.includes("prize") || lower.includes("hackathon") || lower.includes("trophy") || lower.includes("skillup")) {
-        return "Student Achievements";
-      }
-      if (lower.includes("research") || lower.includes("paper") || lower.includes("journal") || lower.includes("scopus") || lower.includes("patent") || lower.includes("faculty")) {
-        return "Faculty Research";
-      }
-      if (lower.includes("placement") || lower.includes("offer") || lower.includes("salary") || lower.includes("ctc") || lower.includes("recruiter") || lower.includes("company")) {
-        return "Placements & Internships";
-      }
-      if (lower.includes("workshop") || lower.includes("seminar") || lower.includes("training") || lower.includes("guest") || lower.includes("speaker") || lower.includes("webinar")) {
-        return "Workshops & Seminars";
-      }
-      if (lower.includes("induction") || lower.includes("orientation") || lower.includes("fresher") || lower.includes("welcome") || lower.includes("deeksharambh")) {
-        return "Induction & Activities";
-      }
-      if (lower.includes("sport") || lower.includes("club") || lower.includes("tournament") || lower.includes("match") || lower.includes("athlete")) {
-        return "Sports & Clubs";
-      }
-      return "";
-    };
-
-    lines.forEach((line) => {
-      const detected = detectCategory(line);
-      const isHeader = line.length < 80 && (line === line.toUpperCase() || line.endsWith(":") || detected || line.startsWith("#"));
-
-      if (isHeader) {
-        if (currentTitle && currentParagraphs.length > 0) {
-          articles.push({
-            title: currentTitle,
-            category: currentCategory,
-            content: currentParagraphs.join(" ").trim(),
-            images: []
-          });
-        }
-        currentTitle = line.replace(/^#+\s*/, '').replace(/:$/, '').trim();
-        currentCategory = detected || currentCategory;
-        currentParagraphs = [];
-      } else {
-        if (!currentTitle) {
-          currentTitle = detected ? line : `${fileName.replace(/\.[^/.]+$/, "")} Spotlight`;
-          if (detected) currentCategory = detected;
-        }
-        currentParagraphs.push(line);
-      }
-    });
-
-    if (currentTitle && currentParagraphs.length > 0) {
-      articles.push({
-        title: currentTitle,
-        category: currentCategory,
-        content: currentParagraphs.join(" ").trim(),
-        images: []
-      });
-    }
-
-    if (articles.length === 0) {
-      articles.push({
-        title: fileName.replace(/\.[^/.]+$/, "") || "Department Spotlight",
-        category: "Department Highlights",
-        content: cleanText || "Extracted content from uploaded file.",
-        images: []
-      });
-    }
-
-    return articles;
-  };
-
-  const handleConfirmRawContentToNewsletter = async () => {
-    if (extractedArticles.length === 0) return;
-    setIsPopulatingNewsletter(true);
-    try {
-      const promptParts = extractedArticles.map((art, idx) => 
-        `Article ${idx + 1} [Category: ${art.category}]:\nTitle: ${art.title}\nContent: ${art.content}`
-      );
-      const combinedPrompt = `Extracted Raw Content from file "${rawContentFileName}":\n\n` + promptParts.join("\n\n");
-      const deptName = user?.department || "Information Technology";
-      const cleanName = rawContentFileName.replace(/\s*\(Imported\)/g, '').replace(/\s*\(AI Generated\)/g, '');
-
-      const analyzeRes = await fetch('/api/ai/analyze-prompt', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({ prompt: combinedPrompt })
-      });
-
-      let eventType = "Uploaded Event";
-      let date = "June 2026";
-      let audience = "150 Students";
-
-      if (analyzeRes.ok) {
-        const analyzed = await analyzeRes.json();
-        eventType = analyzed.eventType || eventType;
-        date = analyzed.date || date;
-        audience = analyzed.audience || audience;
-      }
-
-      const genRes = await fetch('/api/projects/generate-ai', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${user.token}`
-        },
-        body: JSON.stringify({
-          templateId: 1,
-          name: cleanName,
-          eventType,
-          department: deptName,
-          date,
-          audience,
-          keywords: "Imported Event File",
-          tone: "Professional",
-          prompt: combinedPrompt
-        })
-      });
-
-      if (genRes.ok) {
-        const created = await genRes.json();
-        setShowRawContentModal(false);
-        showSuccess(`Successfully populated ${extractedArticles.length} extracted content section(s) into the 8-page newsletter!`, "Newsletter Created");
-        onEditProject(created.id);
-      } else {
-        showError("Failed to generate newsletter from raw content.", "Generation Failed");
-      }
-    } catch (e) {
-      console.error(e);
-      showError("Error populating newsletter.", "Generation Error");
-    } finally {
-      setIsPopulatingNewsletter(false);
-    }
-  };
-
-  const handleImportPdfDirectly = async (file: File) => {
-    if (!file) return;
-    const fileNameClean = file.name.replace(/\.[^/.]+$/, "");
-    setSaving(true);
-    try {
-      const deptName = user.department || 'Information Technology';
-      const initialContent = createBlankNewsletterContent(fileNameClean, deptName);
-      
-      let createdId = Date.now();
-      try {
-        const response = await fetch('/api/projects', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${user.token}`
-          },
-          body: JSON.stringify({
-            name: `${fileNameClean} (PDF Import)`,
-            category: 'Academic',
-            department: deptName,
-            status: 'DRAFT',
-            isTemplate: false,
-            content: initialContent
-          })
-        });
-
-        if (response.ok) {
-          const created = await response.json();
-          createdId = created.id;
-        }
-      } catch (e) {
-        console.warn("Backend project creation offline fallback", e);
-      }
-
-      showSuccess(`Opening ${file.name} in Import & Place workspace...`, "PDF Uploaded");
-      onEditProject(createdId, file);
-    } catch (err) {
-      console.error("PDF upload error", err);
-      showError("Error starting PDF Import workspace.", "Upload Error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleImportProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const fileNameClean = file.name.replace(/\.[^/.]+$/, "");
-    setRawContentFileName(fileNameClean);
-
-    // Process PDF file directly -> OPEN IMPORT & PLACE WORKSPACE
-    if (file.name.toLowerCase().endsWith('.pdf') || file.type === 'application/pdf') {
-      await handleImportPdfDirectly(file);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        const text = event.target?.result as string;
-        
-        if (file.name.endsWith('.json')) {
-          try {
-            const parsed = JSON.parse(text);
-            if (parsed.pages || parsed.content) {
-              let contentStr = "";
-              if (parsed.content) {
-                contentStr = typeof parsed.content === 'string' ? parsed.content : JSON.stringify(parsed.content);
-              } else {
-                contentStr = JSON.stringify({
-                  canvasWidth: parsed.canvasWidth || 800,
-                  canvasHeight: parsed.canvasHeight || 1130,
-                  theme: parsed.theme || { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#ffffff' },
-                  pages: parsed.pages || []
-                });
-              }
-
-              setSaving(true);
-              const response = await fetch('/api/projects', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${user.token}`
-                },
-                body: JSON.stringify({
-                  name: parsed.name || `${fileNameClean} (Imported)`,
-                  category: parsed.category || 'Academic',
-                  department: user.department || 'General',
-                  status: 'DRAFT',
-                  isTemplate: false,
-                  content: contentStr
-                })
-              });
-
-              if (response.ok) {
-                const created = await response.json();
-                showSuccess("Project imported successfully!", "Project Imported");
-                onEditProject(created.id);
-                return;
-              }
-            }
-          } catch (jsonErr) {
-            // Not a valid project JSON, treat as text prompt
-          }
-        }
-        
-        // Parse text into raw articles and show Raw Content Intermediate View
-        const articles = parseRawTextToArticles(text, fileNameClean);
-        setExtractedArticles(articles);
-        setShowRawContentModal(true);
-      } catch (err) {
-        console.error(err);
-        showError("Error parsing uploaded file.", "Upload Error");
-      }
-    };
-    reader.readAsText(file);
-  };
-
-
-
   const handleUseTemplate = async (template: ProjectData) => {
     setSaving(true);
     try {
@@ -1179,7 +897,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                   <p className="text-xs text-slate-400 mt-0.5">Select the official 8-page newsletter template, start a blank issue, or generate content using AI.</p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {/* CTRL+READ Official Department Newsletter Template (Single Official Template) */}
                   <div 
                     onClick={() => {
@@ -1261,44 +979,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                       ✨ Generate with AI
                     </button>
                   </div>
-
-                  {/* Upload Existing PDF (Two-Panel Import & Place Workspace) */}
-                  <div 
-                    onClick={() => pdfUploadRef.current?.click()}
-                    className="group bg-gradient-to-br from-slate-900 via-slate-950 to-indigo-950/60 border border-indigo-500/30 hover:border-indigo-400/60 rounded-2xl p-5 flex flex-col justify-between cursor-pointer transition-all hover:shadow-xl hover:scale-[1.01] h-48"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="px-2 py-0.5 rounded-md text-[9px] font-extrabold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 uppercase tracking-wider">
-                        PDF IMPORT
-                      </span>
-                      <Upload className="w-4 h-4 text-indigo-400" />
-                    </div>
-                    <div className="space-y-1 my-2">
-                      <h4 className="font-extrabold text-sm text-white group-hover:text-indigo-300 transition-colors">
-                        Upload Existing PDF
-                      </h4>
-                      <p className="text-[10px] text-slate-400 leading-relaxed font-medium">
-                        Two-Panel Import & Place: Drag whole A4 PDF pages with dynamic page count & smart split.
-                      </p>
-                    </div>
-                    <button className="w-full py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[11px] font-bold rounded-xl text-center shadow-md flex items-center justify-center space-x-1.5">
-                      <Upload className="w-3 h-3 text-indigo-200" />
-                      <span>Import & Place PDF</span>
-                    </button>
-                  </div>
                 </div>
-
-                <input
-                  type="file"
-                  ref={pdfUploadRef}
-                  accept=".pdf"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files.length > 0) {
-                      handleImportPdfDirectly(e.target.files[0]);
-                    }
-                  }}
-                  className="hidden"
-                />
               </div>
 
               {/* Segmented Tab List for Drafts & Published */}
@@ -1605,21 +1286,6 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                       <div className="w-6 h-6 rounded bg-white border border-slate-200 dark:border-slate-700" title="White" />
                     </div>
                   </div>
-                </div>
-              </div>
-
-              {/* Import Center */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 p-5 rounded-2xl shadow-xs space-y-3.5">
-                <h3 className="text-xs uppercase tracking-wider font-extrabold text-slate-400 dark:text-slate-555">Import Workspace & PDF Formats</h3>
-                <div className="space-y-2.5">
-                  <p className="text-[10px] text-slate-400 dark:text-slate-555 leading-relaxed">
-                    Upload a `.pdf` format, `.json` backup, or document file to generate a newsletter matching your PDF content using AI.
-                  </p>
-                  <label className="w-full py-2 bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-350 text-[10px] font-bold rounded-xl cursor-pointer transition-all flex items-center justify-center space-x-1.5 shadow-sm">
-                    <input type="file" accept="*" onChange={handleImportProject} className="hidden" />
-                    <Upload className="w-3.5 h-3.5 text-primary" />
-                    <span>Upload PDF / Backup / Event File</span>
-                  </label>
                 </div>
               </div>
             </div>
@@ -2255,138 +1921,7 @@ Students enjoyed hands-on sessions and received certificates.`}
         </div>
       )}
 
-      {/* Raw Content Intermediate Preview Modal */}
-      {showRawContentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-md p-4 animate-in fade-in duration-200 overflow-y-auto">
-          <div className="w-full max-w-4xl bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-100 overflow-hidden flex flex-col max-h-[92vh]">
-            
-            {/* Modal Header */}
-            <div className="p-5 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between border-b border-slate-800">
-              <div className="flex items-center space-x-3">
-                <div className="p-2 bg-indigo-500/20 text-indigo-400 rounded-xl">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-sm font-extrabold flex items-center space-x-2">
-                    <span>Raw Content Extracted: "{rawContentFileName}"</span>
-                    <span className="px-2 py-0.5 bg-indigo-500/30 text-indigo-300 text-[10px] rounded-full font-bold">
-                      {extractedArticles.length} Section{extractedArticles.length !== 1 ? 's' : ''}
-                    </span>
-                  </h3>
-                  <p className="text-[11px] text-slate-300">
-                    Review extracted raw content before populating into the fixed CTRL+READ 8-page newsletter.
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowRawContentModal(false)}
-                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
-              >
-                ✕
-              </button>
-            </div>
 
-            {/* Content Inspection Banner & List */}
-            <div className="p-6 flex-grow overflow-y-auto space-y-4 bg-slate-50 dark:bg-slate-950">
-              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 text-xs text-amber-800 dark:text-amber-300 space-y-1">
-                <div className="font-bold flex items-center space-x-1.5">
-                  <Shield className="w-4 h-4 text-amber-500" />
-                  <span>STRICT TEMPLATE + CONTENT FITTING</span>
-                </div>
-                <p className="text-[11px] leading-relaxed">
-                  Source file formatting & headers are ignored. Only clean content is extracted and will be fitted strictly into the Content Safe Area (below the locked CTRL+READ header).
-                </p>
-              </div>
-
-              {extractedArticles.map((art, idx) => (
-                <div key={idx} className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 shadow-xs space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Section #{idx + 1}
-                    </span>
-                    <select
-                      value={art.category}
-                      onChange={(e) => {
-                        const updated = [...extractedArticles];
-                        updated[idx].category = e.target.value;
-                        setExtractedArticles(updated);
-                      }}
-                      className="px-2.5 py-1 text-xs font-bold bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-primary focus:outline-none"
-                    >
-                      <option value="Student Achievements">Student Achievements</option>
-                      <option value="Faculty Research">Faculty Research</option>
-                      <option value="Placements & Internships">Placements & Internships</option>
-                      <option value="Workshops & Seminars">Workshops & Seminars</option>
-                      <option value="Induction & Activities">Induction & Activities</option>
-                      <option value="Sports & Clubs">Sports & Clubs</option>
-                      <option value="Department Highlights">Department Highlights</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Article / Section Headline</label>
-                    <input
-                      type="text"
-                      value={art.title}
-                      onChange={(e) => {
-                        const updated = [...extractedArticles];
-                        updated[idx].title = e.target.value;
-                        setExtractedArticles(updated);
-                      }}
-                      className="w-full mt-1 px-3 py-2 text-xs font-bold bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-primary"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="text-[10px] font-bold text-slate-400 uppercase">Extracted Article Body</label>
-                    <textarea
-                      rows={4}
-                      value={art.content}
-                      onChange={(e) => {
-                        const updated = [...extractedArticles];
-                        updated[idx].content = e.target.value;
-                        setExtractedArticles(updated);
-                      }}
-                      className="w-full mt-1 px-3 py-2 text-xs font-medium bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl focus:outline-none focus:border-primary"
-                    />
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <button
-                type="button"
-                onClick={() => setShowRawContentModal(false)}
-                className="px-5 py-2.5 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                disabled={isPopulatingNewsletter || extractedArticles.length === 0}
-                onClick={handleConfirmRawContentToNewsletter}
-                className="px-6 py-2.5 bg-gradient-to-r from-primary to-blue-600 text-white font-bold rounded-xl text-xs shadow-md hover:shadow-lg transition-all flex items-center space-x-2 disabled:opacity-50"
-              >
-                {isPopulatingNewsletter ? (
-                  <>
-                    <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    <span>Fitting content into template...</span>
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-                    <span>Populate Newsletter Template</span>
-                    <span className="text-xs">➔</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Professional Confirmation Modal for Deleting Projects */}
       {deleteConfirmId !== null && (
