@@ -423,7 +423,7 @@ const PropertiesPanel: React.FC = () => {
               <div className="space-y-1">
                 <label className="text-[9px] font-bold text-slate-400 uppercase">Font Family</label>
                 <select
-                  value={el.fontFamily}
+                  value={el.fontFamily || 'Poppins'}
                   onChange={e => handleUpdate({ fontFamily: e.target.value })}
                   className="w-full border border-slate-200 rounded-lg p-1.5 text-xs text-slate-700 focus:outline-none"
                 >
@@ -431,13 +431,58 @@ const PropertiesPanel: React.FC = () => {
                 </select>
               </div>
               <div className="space-y-1">
-                <label className="text-[9px] font-bold text-slate-400 uppercase">Font Size</label>
-                <input
-                  type="number"
-                  value={el.fontSize}
-                  onChange={e => handleUpdate({ fontSize: parseInt(e.target.value) || 8 })}
-                  className="w-full border border-slate-200 rounded-lg p-1.5 text-xs text-slate-700 focus:outline-none"
-                />
+                <label className="text-[9px] font-bold text-slate-400 uppercase">Font Size ({el.fontSize}px)</label>
+                <div className="flex items-center space-x-1">
+                  <button
+                    type="button"
+                    onClick={() => handleUpdate({ fontSize: Math.max(6, Math.round((el.fontSize || 12) - 1)) })}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-bold text-slate-700"
+                    title="Decrease font size"
+                  >
+                    -
+                  </button>
+                  <input
+                    type="number"
+                    min="6"
+                    max="120"
+                    step="0.5"
+                    value={el.fontSize || 12}
+                    onChange={e => {
+                      const val = parseFloat(e.target.value);
+                      handleUpdate({ fontSize: isNaN(val) ? 12 : val });
+                    }}
+                    className="w-full border border-slate-200 rounded-lg p-1 text-xs text-center text-slate-700 focus:outline-none font-bold"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => handleUpdate({ fontSize: Math.min(120, Math.round((el.fontSize || 12) + 1)) })}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded text-xs font-bold text-slate-700"
+                    title="Increase font size"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Font Size Presets */}
+            <div className="space-y-1">
+              <span className="text-[8px] font-bold text-slate-400 uppercase block">Quick Size Presets:</span>
+              <div className="flex flex-wrap gap-1">
+                {[9, 10, 11, 12, 14, 16, 18, 20, 24, 32, 48, 52].map(sz => (
+                  <button
+                    key={sz}
+                    type="button"
+                    onClick={() => handleUpdate({ fontSize: sz })}
+                    className={`px-1.5 py-0.5 text-[9px] rounded font-bold transition-all ${
+                      Number(el.fontSize) === sz
+                        ? 'bg-primary text-white shadow-xs'
+                        : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                    }`}
+                  >
+                    {sz}
+                  </button>
+                ))}
               </div>
             </div>
 

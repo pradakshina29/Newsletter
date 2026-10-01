@@ -967,8 +967,10 @@ const ContentWizardPanel: React.FC = () => {
   };
 
   // Universal Inbuilt AI Copywriter for EVERY Page
-  const handleInbuiltAiGenerateCurrentPage = (pageNum: number) => {
+  // Universal Dynamic AI Copywriter for the Active Page
+  const triggerGenerateArticle = async (tone: string = "standard") => {
     if (!activeProject || !activeProject.pages) return;
+    const pageNum = activePageNum;
     const totalPages = activeProject.pages.length;
     const isCover = pageNum === 1;
     const isEditorial = pageNum === totalPages && pageNum > 1;
@@ -977,14 +979,19 @@ const ContentWizardPanel: React.FC = () => {
 
     setIsGeneratingArticle(true);
 
-    setTimeout(() => {
+    try {
       if (isCover) {
         handleTextChange('p1_school_text', 'SCHOOL OF COMPUTING SCIENCE & DIGITAL INNOVATION');
         handleTextChange('p1_dept_text', `DEPARTMENT OF ${deptUpper}`);
         handleTextChange('p1_title_hdr', 'CTRL+READ');
         handleTextChange('p1_subtitle_hdr', 'OFFICIAL ACADEMIC NEWSLETTER');
         handleTextChange('p1_date_hdr', 'JUNE 2026');
-        setGeneratedArticle(`Welcome to the June 2026 edition of CTRL+READ, the official academic publication of the Department of ${deptName} at KPRCAS. This issue highlights exceptional student achievements, national hackathon triumphs, faculty research publications, corporate placement drives, and interactive campus workshops. Our students and faculty members continue to set benchmarks in technical innovation, research endeavors, and academic excellence.`);
+        const coverArticle = detectAndFixCase(
+          `Welcome to the official academic publication of the Department of ${deptName} at KPRCAS. This issue highlights exceptional student achievements, national hackathon triumphs, faculty research publications, corporate placement drives, and interactive campus workshops. Our students and faculty members continue to set benchmarks in technical innovation, research endeavors, and academic excellence.`,
+          'sentence'
+        );
+        setGeneratedArticle(coverArticle);
+        showSuccess("Cover page welcome copy generated.", "AI Copy Ready");
       } else if (isEditorial) {
         const chiefNameId = `p${pageNum}_name_chief`;
         const chiefRoleId = `p${pageNum}_desig_chief`;
@@ -999,124 +1006,163 @@ const ContentWizardPanel: React.FC = () => {
         handleTextChange(coNameId, 'MR. AKHIL K M');
         handleTextChange(coRoleId, 'ASSISTANT PROFESSOR');
         handleTextChange(coDeptId, `DEPT. OF ${deptUpper}`);
-        setGeneratedArticle(`The Editorial Board expresses heartfelt gratitude to the management, Principal, HOD, faculty mentors, and student contributors for bringing out this edition of CTRL+READ. For feedback or submissions, contact editor@kprcas.ac.in.`);
+        const edArticle = detectAndFixCase(
+          `The Editorial Board expresses heartfelt gratitude to the management, Principal, HOD, faculty mentors, and student contributors for bringing out this edition of CTRL+READ. For feedback or submissions, contact editor@kprcas.ac.in.`,
+          'sentence'
+        );
+        setGeneratedArticle(edArticle);
+        showSuccess("Editorial board copy generated.", "AI Copy Ready");
       } else {
         const cat = getPageCategory(pageNum);
-        let title = "";
-        let details = "";
-        let article = "";
+        let titleVal = "";
+        let personVal = "";
+        let dateVal = "";
+        let detailsVal = "";
+        let classVal = "";
+        let teamVal = "";
 
-        if (cat === 'student' || pageNum === 2) {
-          title = "NATIONAL HACKATHON TRIUMPH & CASH PRIZE";
-          details = "First place winner at the National Smart India Tech Hackathon 2026. Awarded Cash Prize of Rs. 50,000 for AI Web Innovation.";
-          article = `Our department student team achieved outstanding national recognition by bagging the First Place Trophy and a cash award of Rs. 50,000 at the National Smart India Tech Hackathon 2026. Out of over 400 participating delegations across leading technical institutions, our students engineered an AI-powered automated workflow platform that solved complex real-world challenges. The jury panel, comprising senior technical leaders and industry domain architects, commended our team for their exceptional system architecture, algorithmic efficiency, and seamless user experience presentation. The Department of ${deptName} warmly congratulates the winners on their stellar academic performance!`;
-          
-          setStudentForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              title,
-              teamName: "Team Innovation",
-              student: "S. KAVIN & TEAM (III YEAR B.SC IT)",
-              award: "FIRST PLACE & GOLD MEDAL",
-              host: "NATIONAL TECH FEST 2026",
-              classDept: `III YEAR ${deptUpper}`,
-              details,
-              keywords: details
-            }
-          }));
-        } else if (cat === 'faculty' || pageNum === 7) {
-          title = "FACULTY RESEARCH PUBLICATION IN IEEE TRANSACTIONS";
-          details = "Published peer-reviewed research paper on Machine Learning Architectures & Cloud Optimization. Indexed in Scopus and Web of Science.";
-          article = `Dr. S. Srividhya, Associate Professor & Head, Department of ${deptName}, has successfully published a landmark research paper titled "Advanced Machine Learning Architectures for Next-Generation Cloud Systems" in IEEE Transactions. The research presents innovative algorithmic optimizations for distributed data processing and cloud security. This high-impact publication adds significant academic prestige to KPRCAS and serves as an inspiring benchmark for student researchers.`;
-
-          setFacultyForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              faculty: "DR. S. SRIVIDHYA",
-              desig: "ASSOCIATE PROFESSOR & HOD",
-              paper: title,
-              journal: "IEEE TRANSACTIONS ON COMPUTING (VOL. 42)",
-              date: "MAY 2026",
-              contribution: details
-            }
-          }));
-        } else if (cat === 'placement' || pageNum === 3) {
-          title = "RECORD 98% PLACEMENT IN TOP MNC CORPORATE DRIVE";
-          details = "Over 45 students secured lucrative career offers in leading MNCs including TCS, Wipro, Infosys, and Cognizant with highest CTC of 9.5 LPA.";
-          article = `The Placement Cell of the Department of ${deptName} is proud to announce an exceptional placement milestone for the graduating batch of 2026. Through rigorous campus recruitment drives and technical training bootcamps, over 98% of eligible students secured high-profile software engineering and analytical roles in top-tier multinational corporations. The highest salary package reached 9.5 LPA, with an average CTC of 4.8 LPA. Corporate recruiters commended the students' strong foundational coding skills, problem-solving dexterity, and professional interview readiness.`;
-
-          setPlacementForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              company: "TOP MNC RECRUITERS (TCS, WIPRO, INFOSYS)",
-              domain: "SOFTWARE DEVELOPMENT",
-              count: "45 STUDENTS PLACED",
-              package: "HIGHEST CTC: 9.5 LPA • AVG: 4.8 LPA",
-              highlights: details
-            }
-          }));
-        } else if (cat === 'workshop' || pageNum === 4) {
-          title = "EXPERT WORKSHOP ON FULL STACK CLOUD ARCHITECTURE";
-          details = "Hands-on technical workshop on React, Spring Boot, and Kubernetes deployment led by industry technical lead.";
-          article = `An intensive 2-day hands-on workshop on "Full Stack Cloud Architecture & Microservices" was organized by the Department of ${deptName} on May 18-19, 2026. Over 120 student delegates participated in live coding sessions, containerization exercises, and cloud deployment pipelines. The resource person, a Chief Solutions Architect from Amazon Web Services, provided practical insights into industry deployment workflows. Participants successfully deployed real-time web applications by the conclusion of the workshop.`;
-
-          setWorkshopForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              title,
-              speaker: "CHIEF ARCHITECT, AWS INDIA",
-              date: "MAY 18-19, 2026",
-              audience: "DEPARTMENT STUDENTS & FACULTY",
-              topics: "REACT, SPRING BOOT, KUBERNETES, CI/CD",
-              keywords: details
-            }
-          }));
-        } else if (cat === 'welcome' || pageNum === 5) {
-          title = "FRESHERS ORIENTATION & DIGITAL INDUCTION 2026";
-          details = "Welcoming the incoming cohort of students with campus orientation, technical club introductions, and mentor interactions.";
-          article = `The Department of ${deptName} hosted a grand Orientation & Induction Ceremony to welcome the incoming batch of 2026. The inaugural session commenced with inspiring addresses by the Principal and HOD, highlighting academic opportunities, industry certification courses, and research initiatives available at KPRCAS. Senior student leaders presented live demonstrations of departmental technical clubs, hackathons, and cultural societies. The event concluded with an interactive mentor-mentee orientation session.`;
-
-          setWelcomeForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              title,
-              date: "JUNE 2026",
-              guest: "PRINCIPAL & DEPARTMENT HOD",
-              highlights: "CAMPUS TOUR, MENTORSHIP, HACKATHON CLUBS",
-              advice: "EMBRACE LEARNING, INNOVATION & DISCIPLINE"
-            }
-          }));
+        if (cat === 'student') {
+          const s = getStudentForm(pageNum);
+          titleVal = s.title;
+          personVal = s.student;
+          dateVal = s.award;
+          detailsVal = s.details || s.keywords;
+          classVal = s.classDept;
+          teamVal = s.teamName;
+        } else if (cat === 'faculty') {
+          const f = getFacultyForm(pageNum);
+          titleVal = f.paper;
+          personVal = f.faculty;
+          dateVal = f.date;
+          detailsVal = f.contribution;
+        } else if (cat === 'placement') {
+          const p = getPlacementForm(pageNum);
+          titleVal = p.company;
+          personVal = p.domain;
+          dateVal = p.package;
+          detailsVal = p.highlights;
+        } else if (cat === 'workshop') {
+          const w = getWorkshopForm(pageNum);
+          titleVal = w.title;
+          personVal = w.speaker;
+          dateVal = w.date;
+          detailsVal = w.topics || w.keywords;
+        } else if (cat === 'welcome') {
+          const wl = getWelcomeForm(pageNum);
+          titleVal = wl.title;
+          personVal = wl.guest;
+          dateVal = wl.date;
+          detailsVal = wl.highlights || wl.advice;
         } else {
-          title = `DEPARTMENT TECH FEST & EXPO 2026`;
-          details = `Showcase of 30+ innovative student projects, AI software apps, and hardware prototypes before college dignitaries.`;
-          article = `The Department of ${deptName} organized its flagship Annual Technical Symposium and Project Expo. Over 30 student teams presented cutting-edge software applications, web tools, and AI prototypes before an esteemed jury of industry veterans. The event fostered a vibrant spirit of innovation, collaborative learning, and technical craftsmanship across all academic batches. Outstanding projects were awarded certificates of merit and trophy accolades.`;
-
-          setCustomForms(prev => ({
-            ...prev,
-            [pageNum]: {
-              title,
-              person: "CHIEF GUEST & INDUSTRY JURY",
-              recipient: "DEPARTMENT STUDENTS & FACULTY",
-              details,
-              keywords: details
-            }
-          }));
+          const c = getCustomForm(pageNum);
+          titleVal = c.title;
+          personVal = c.person;
+          dateVal = c.recipient;
+          detailsVal = c.details || c.keywords;
         }
 
-        setGeneratedArticle(article);
-        
-        setTimeout(() => {
-          handleApplyToActivePage();
-        }, 150);
+        // Check if user has uploaded report or entered form title
+        const currentTitle = titleVal || activeProject.pages[pageNum - 1]?.title || "";
+
+        let generatedText = "";
+
+        // Attempt server AI generation first
+        try {
+          const token = localStorage.getItem('token');
+          const resp = await fetch('/api/ai/generate-news-article', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              category: cat,
+              event: currentTitle,
+              date: dateVal || "KPRCAS",
+              resourcePerson: personVal,
+              participants: classVal || `Department of ${deptName} Students`,
+              keywords: detailsVal,
+              tone
+            })
+          });
+
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data.article && data.article.length > 50) {
+              generatedText = deduplicateSentences(data.article);
+            }
+          }
+        } catch (apiErr) {
+          console.warn("Backend AI call failed, using client-side generator:", apiErr);
+        }
+
+        // Resilient client-side fallback if server didn't provide text
+        if (!generatedText) {
+          const cleanT = currentTitle ? detectAndFixCase(currentTitle, 'title') : 'Academic Event';
+          const cleanP = personVal ? detectAndFixCase(personVal, 'title') : 'Student and Faculty Participants';
+          const cleanD = detailsVal ? detectAndFixCase(detailsVal, 'sentence') : 'enriching presentations, interactive discussions, and technical showcases';
+          const cleanDept = `Department of ${deptName}`;
+
+          if (cat === 'student') {
+            const sentences = [
+              `The ${cleanDept} organized the academic initiative titled "${cleanT}" hosted at KPRCAS campus.`,
+              teamVal ? `The project was engineered by Team "${detectAndFixCase(teamVal, 'title')}"${classVal ? ` from ${classVal}` : ''}.` : '',
+              `The student delegation (${cleanP}) displayed exemplary technical capability, innovative thinking, and high enthusiasm.`,
+              `During the event sessions, participants delivered interactive demonstrations highlighting core system features and practical workflows.`,
+              cleanD ? `Key project highlights included ${cleanD}.` : `The team presented hands-on solutions addressing practical real-world problems.`,
+              `The executive leadership and faculty members expressed high appreciation for the students' problem-solving mindset and teamwork.`,
+              `The department warmly congratulates the students on their active participation and academic initiative!`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          } else if (cat === 'faculty') {
+            const sentences = [
+              `The ${cleanDept} takes great pride in announcing the milestone research publication titled "${cleanT}".`,
+              `Authored by esteemed faculty member(s) ${cleanP}, the work represents rigorous academic inquiry and technical innovation.`,
+              cleanD ? `The research presents high-impact insights into ${cleanD}.` : `The findings address critical domain challenges with novel methodological solutions.`,
+              `The publication underwent peer review, receiving high commendations for methodological rigor and academic excellence.`,
+              `The Management, Principal, and Department members warmly congratulate the author(s) on this scholarly milestone!`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          } else if (cat === 'placement') {
+            const sentences = [
+              `The ${cleanDept} successfully conducted a targeted campus placement drive in partnership with ${cleanT}.`,
+              `The recruitment drive was organized for technical and software roles${dateVal ? ` offering competitive salary packages of ${dateVal}` : ''}.`,
+              `Final year students participated with high enthusiasm, clearing rigorous aptitude, coding, and interview rounds.`,
+              cleanD ? `Selection highlights included: ${cleanD}.` : `Corporate recruiters commended KPRCAS candidates for their industry readiness and analytical capability.`,
+              `The department extends its heartiest congratulations to all placed students and wishes them stellar career success!`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          } else if (cat === 'workshop') {
+            const sentences = [
+              `The ${cleanDept} organized an intensive technical workshop titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
+              `The sessions were led by distinguished resource speaker ${cleanP}, who shared valuable real-world perspectives and technical methodologies.`,
+              `Participants actively engaged in hands-on practical exercises, live architecture setups, and interactive problem-solving modules.`,
+              cleanD ? `Key topics explored during the workshop included: ${cleanD}.` : `The curriculum effectively bridged classroom theoretical concepts with current industry best practices.`,
+              `The workshop concluded with interactive Q&A and high appreciation from all attendees.`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          } else {
+            const sentences = [
+              `The ${cleanDept} successfully conducted the academic program titled "${cleanT}".`,
+              `The event was graced and coordinated by ${cleanP}, bringing together participants for an enriching learning session.`,
+              `The program focused on fostering academic collaboration, practical knowledge transfer, and domain skill development.`,
+              cleanD ? `Key event highlights included: ${cleanD}.` : `Participants actively engaged in interactive discussions and project demonstrations.`,
+              `The department congratulates all organizers and participants for making the event a grand academic success!`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          }
+        }
+
+        generatedText = detectAndFixCase(generatedText, 'sentence');
+        setGeneratedArticle(generatedText);
+        showSuccess(`Generated AI article copy for Page ${pageNum}! Click 'Apply Content to Page' when ready.`, "AI Copy Ready");
       }
-
+    } catch (err) {
+      console.error(err);
+      showError("Error generating article copy.", "Generation Error");
+    } finally {
       setIsGeneratingArticle(false);
-    }, 300);
-  };
-
-  // Call backend to generate factual event copy for specific pages
-  const triggerGenerateArticle = async (_tone: string = "standard") => {
-    handleInbuiltAiGenerateCurrentPage(activePageNum);
+    }
   };
 
   // Text Sanitizer to scrub binary junk, EXIF metadata, and replacement characters
@@ -1295,7 +1341,7 @@ const ContentWizardPanel: React.FC = () => {
       // 1. Article Title Banner (Positioned cleanly at y: 215 in safe area)
       const contentElements: any[] = [
         {
-          id: `p${targetPageNum}_title_${Date.now()}`,
+          id: `p${targetPageNum}_title`,
           type: 'text',
           x: 50,
           y: currentY,
@@ -1331,7 +1377,7 @@ const ContentWizardPanel: React.FC = () => {
         const subFontSize = subText.length > 85 ? 10 : 10.5;
 
         contentElements.push({
-          id: `p${targetPageNum}_sub_${Date.now()}`,
+          id: `p${targetPageNum}_sub_title`,
           type: 'text',
           x: 50,
           y: currentY,
@@ -1358,7 +1404,7 @@ const ContentWizardPanel: React.FC = () => {
       if (reportConfirmData.host && reportConfirmData.host.trim().length > 5) {
         const cleanHost = detectAndFixCase(reportConfirmData.host.replace(/\s+/g, ' ').trim(), 'title');
         contentElements.push({
-          id: `p${targetPageNum}_host_${Date.now()}`,
+          id: `p${targetPageNum}_host`,
           type: 'text',
           x: 50,
           y: currentY,
@@ -1383,7 +1429,7 @@ const ContentWizardPanel: React.FC = () => {
 
       // 4. Subtle Meta Divider Line
       contentElements.push({
-        id: `p${targetPageNum}_meta_line_${Date.now()}`,
+        id: `p${targetPageNum}_meta_line`,
         type: 'shape',
         shapeType: 'rect',
         x: 180,
@@ -1406,7 +1452,7 @@ const ContentWizardPanel: React.FC = () => {
       const bodyFontSize = (hasPhotos && bodyText.length > 650) ? 9.5 : 10.5;
 
       contentElements.push({
-        id: `p${targetPageNum}_body_${Date.now()}`,
+        id: `p${targetPageNum}_text`,
         type: 'text',
         x: 50,
         y: currentY,
@@ -1443,7 +1489,7 @@ const ContentWizardPanel: React.FC = () => {
         }
 
         contentElements.push({
-          id: `p${targetPageNum}_img_${idx + 1}_${Date.now()}`,
+          id: `p${targetPageNum}_img_${idx + 1}`,
           type: 'image',
           x,
           y,
@@ -2434,7 +2480,7 @@ const ContentWizardPanel: React.FC = () => {
               Click below to let Inbuilt AI auto-generate professional academic news content, headlines, dates, and articles for Page {activePageNum} and apply them directly into your layout.
             </p>
             <button
-              onClick={() => handleInbuiltAiGenerateCurrentPage(activePageNum)}
+              onClick={() => triggerGenerateArticle(selectedTone)}
               disabled={isGeneratingArticle}
               className="w-full py-2.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50"
             >

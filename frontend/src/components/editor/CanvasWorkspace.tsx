@@ -40,7 +40,7 @@ const TextElementComponent: React.FC<{
       }}
       className={`w-full h-full focus:outline-none ${el.locked ? 'cursor-default select-none' : 'cursor-text'} ${isSelected && !el.locked ? 'ring-1 ring-primary/60 bg-blue-50/10' : !el.locked ? 'hover:bg-blue-50/5' : ''}`}
       style={{
-        fontSize: el.fontSize,
+        fontSize: typeof el.fontSize === 'number' ? `${el.fontSize}px` : (el.fontSize || '14px'),
         fontFamily: el.fontFamily,
         color: el.color,
         fontWeight: el.bold ? 'bold' : 'normal',

@@ -2,6 +2,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { Upload, FileText, Sparkles, Move, Layers, ArrowRight, ShieldCheck, RefreshCw, X, Trash2, Plus } from 'lucide-react';
 import CanvasWorkspace from './CanvasWorkspace';
+import { extractDocumentContent, parseReportEntities, deduplicateSentences } from '../../utils/documentParser';
+import { detectAndFixCase } from '../../utils/textCase';
 
 interface ExtractedBlock {
   id: string;
@@ -33,47 +35,92 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
   const activePageNum = pageIndex !== -1 ? pageIndex + 1 : 1;
   const currentPage = activeProject.pages[pageIndex] || activeProject.pages[0];
 
-  // Process uploaded file whenever a file is passed or uploaded
-  const parseFileObject = (file: File) => {
+  // Process uploaded file (PDF, DOCX, TXT, Image) using smart document parser
+  const parseFileObject = async (file: File) => {
     setFileName(file.name);
     setIsParsing(true);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result;
-      setTimeout(() => {
-        let parsed: ExtractedBlock[] = [];
-        if (typeof content === 'string' && content.trim()) {
-          const lines = content.split('\n').map(l => l.trim()).filter(Boolean);
-          const rawTitle = lines[0] || 'EXTRACTED EVENT TITLE';
-          const rawSubtitle = lines[1] || 'Activity Details & Report';
-          const rawBody = lines.slice(2).join('\n\n') || 'Event details extracted from source file.';
+    try {
+      if (file.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const imgUrl = e.target?.result as string;
+          const cleanName = detectAndFixCase(file.name.replace(/\.[^/.]+$/, "").replace(/[_\-]+/g, " "), 'title');
+          const parsed: ExtractedBlock[] = [
+            { id: `ext_${Date.now()}_1`, type: 'title', title: 'PHOTO TITLE', content: cleanName.toUpperCase() },
+            { id: `ext_${Date.now()}_2`, type: 'image', title: 'EVENT PHOTO', content: file.name, url: imgUrl }
+          ];
+          setExtractedBlocks(parsed);
+          setIsParsing(false);
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
 
-          parsed = [
-            { id: `ext_${Date.now()}_1`, type: 'title', title: 'EVENT HEADLINE', content: rawTitle.toUpperCase() },
-            { id: `ext_${Date.now()}_2`, type: 'sub_title', title: 'SUBTITLE / DIGNITARY', content: rawSubtitle },
-            { id: `ext_${Date.now()}_3`, type: 'text', title: 'ARTICLE BODY CONTENT', content: rawBody }
-          ];
-        } else if (file.type.startsWith('image/')) {
-          parsed = [
-            { id: `ext_${Date.now()}_1`, type: 'title', title: 'IMAGE TITLE', content: file.name.replace(/\.[^/.]+$/, "").toUpperCase() },
-            { id: `ext_${Date.now()}_2`, type: 'image', title: 'UPLOADED PHOTO', content: file.name, url: content as string }
-          ];
-        } else {
-          parsed = [
-            { id: `ext_${Date.now()}_1`, type: 'title', title: 'FILE TITLE', content: file.name.replace(/\.[^/.]+$/, "").toUpperCase() },
-            { id: `ext_${Date.now()}_2`, type: 'text', title: 'DOCUMENT DETAILS', content: `Content extracted from ${file.name}. Drag this text onto the right template.` }
-          ];
-        }
-        setExtractedBlocks(parsed);
-        setIsParsing(false);
-      }, 400);
-    };
+      // Robust extraction for PDF, DOCX, and TXT
+      const extracted = await extractDocumentContent(file);
+      const dept = activeProject.department || "Information Technology";
+      const parsedData = parseReportEntities(extracted.text, file.name, dept);
 
-    if (file.type.startsWith('image/')) {
-      reader.readAsDataURL(file);
-    } else {
-      reader.readAsText(file);
+      const parsedBlocks: ExtractedBlock[] = [];
+
+      // 1. Headline block
+      const cleanTitle = detectAndFixCase(parsedData.title, 'title');
+      parsedBlocks.push({
+        id: `ext_${Date.now()}_title`,
+        type: 'title',
+        title: 'EVENT HEADLINE',
+        content: cleanTitle.toUpperCase()
+      });
+
+      // 2. Subtitle / Resource Person block
+      const subParts = [
+        parsedData.student ? `Resource Person: ${detectAndFixCase(parsedData.student, 'title')}` : '',
+        parsedData.date ? `Date: ${parsedData.date}` : '',
+        `Venue: Seminar Hall`
+      ].filter(Boolean);
+
+      if (subParts.length > 0) {
+        parsedBlocks.push({
+          id: `ext_${Date.now()}_sub`,
+          type: 'sub_title',
+          title: 'SUBTITLE / RESOURCE PERSON',
+          content: subParts.join(' | ')
+        });
+      }
+
+      // 3. Article body narrative paragraph
+      const cleanArticle = deduplicateSentences(parsedData.article || extracted.text);
+      parsedBlocks.push({
+        id: `ext_${Date.now()}_body`,
+        type: 'text',
+        title: 'ARTICLE BODY NARRATIVE',
+        content: cleanArticle
+      });
+
+      // 4. Extracted Photos from document
+      if (extracted.images && extracted.images.length > 0) {
+        extracted.images.slice(0, 3).forEach((imgUrl, idx) => {
+          parsedBlocks.push({
+            id: `ext_${Date.now()}_img_${idx + 1}`,
+            type: 'image',
+            title: `DOCUMENT PHOTO ${idx + 1}`,
+            content: `Extracted photo ${idx + 1} from ${file.name}`,
+            url: imgUrl
+          });
+        });
+      }
+
+      setExtractedBlocks(parsedBlocks);
+    } catch (err) {
+      console.error("Error in DualPaneStudio file parser:", err);
+      // Fallback simple blocks
+      setExtractedBlocks([
+        { id: `ext_${Date.now()}_1`, type: 'title', title: 'FILE TITLE', content: file.name.replace(/\.[^/.]+$/, "").toUpperCase() },
+        { id: `ext_${Date.now()}_2`, type: 'text', title: 'DOCUMENT DETAILS', content: `Extracted content from ${file.name}.` }
+      ]);
+    } finally {
+      setIsParsing(false);
     }
   };
 
@@ -234,9 +281,9 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
       }
     } else if (block.type === 'image' && block.url) {
       const existingImgs = updatedElements.filter(el => el.type === 'image' && el.id.startsWith(`p${activePageNum}_img`));
-      const nextIdx = existingImgs.length + 1;
+      const nextIdx = Math.min(3, existingImgs.length + 1);
       updatedElements.push({
-        id: `p${activePageNum}_img_${nextIdx}_${Date.now()}`,
+        id: `p${activePageNum}_img_${nextIdx}`,
         type: 'image',
         x: 50,
         y: Math.max(510, dropY),

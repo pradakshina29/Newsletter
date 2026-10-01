@@ -116,63 +116,88 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const hostEl = nonHeaderElements.find((el: any) => el.type === 'text' && el.id.includes('_host'));
   const bodyEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_text') || el.id.includes('_body') || el.id.includes('_content') || el.id.includes('_paragraph') || el.id.includes('_desc')));
   const photoEls = nonHeaderElements.filter((el: any) => el.type === 'image' && !el.id.includes('logo') && !el.id.includes('pic_'));
-  const otherEls = nonHeaderElements.filter((el: any) => 
-    el !== titleEl && el !== subEl && el !== hostEl && el !== bodyEl && !photoEls.includes(el)
-  );
+  
+  // Exclude duplicate/redundant title/sub/body text elements from otherEls to prevent duplication
+  const otherEls = nonHeaderElements.filter((el: any) => {
+    if (el === titleEl || el === subEl || el === hostEl || el === bodyEl || photoEls.includes(el)) return false;
+    const lowerId = (el.id || '').toLowerCase();
+    // Filter out old/duplicate titles, sub titles, and body texts from previous report uploads
+    if (titleEl && (lowerId.includes('_title') || lowerId.includes('title_')) && !lowerId.includes('sub')) return false;
+    if (subEl && (lowerId.includes('_sub') || lowerId.includes('sub_'))) return false;
+    if (bodyEl && (lowerId.includes('_text') || lowerId.includes('_body') || lowerId.includes('_content') || lowerId.includes('_paragraph') || lowerId.includes('_desc'))) return false;
+    return true;
+  });
 
   if (titleEl) {
     const textStr = (titleEl as any).text || '';
     const titleHeight = textStr.length > 55 ? 46 : 28;
-    const titleFontSize = textStr.length > 70 ? 15.5 : textStr.length > 50 ? 16.5 : 18;
+    const defaultFontSize = textStr.length > 70 ? 15.5 : textStr.length > 50 ? 16.5 : 18;
+    const userFontSize = (titleEl as any).fontSize;
+    const finalFontSize = (userFontSize !== undefined && !isNaN(Number(userFontSize))) ? Number(userFontSize) : defaultFontSize;
+
     realignedContent.push({
       ...titleEl,
-      x: 50,
+      x: (titleEl as any).x !== undefined ? (titleEl as any).x : 50,
       y: currentY,
-      width: 700,
-      height: titleHeight,
-      fontSize: titleFontSize,
-      align: 'center',
-      bold: true,
-      italic: false,
-      underline: false,
-      color: (titleEl as any).color || '#1E40AF'
+      width: (titleEl as any).width || 700,
+      height: (titleEl as any).height || titleHeight,
+      fontSize: finalFontSize,
+      align: (titleEl as any).align || 'center',
+      bold: (titleEl as any).bold !== undefined ? (titleEl as any).bold : true,
+      italic: (titleEl as any).italic !== undefined ? (titleEl as any).italic : false,
+      underline: (titleEl as any).underline !== undefined ? (titleEl as any).underline : false,
+      color: (titleEl as any).color || '#1E40AF',
+      fontFamily: (titleEl as any).fontFamily || 'Poppins',
+      lineHeight: (titleEl as any).lineHeight || 1.25,
+      letterSpacing: (titleEl as any).letterSpacing !== undefined ? (titleEl as any).letterSpacing : 0
     } as any);
-    currentY += titleHeight + 8;
+    currentY += ((titleEl as any).height || titleHeight) + 8;
   }
 
   if (subEl) {
     const textStr = (subEl as any).text || '';
     const subHeight = textStr.length > 85 ? 32 : 20;
-    const subFontSize = textStr.length > 85 ? 10 : 10.5;
+    const defaultSubFontSize = textStr.length > 85 ? 10 : 10.5;
+    const userSubFontSize = (subEl as any).fontSize;
+    const finalSubFontSize = (userSubFontSize !== undefined && !isNaN(Number(userSubFontSize))) ? Number(userSubFontSize) : defaultSubFontSize;
+
     realignedContent.push({
       ...subEl,
-      x: 50,
+      x: (subEl as any).x !== undefined ? (subEl as any).x : 50,
       y: currentY,
-      width: 700,
-      height: subHeight,
-      fontSize: subFontSize,
-      align: 'center',
-      bold: true,
-      italic: false,
-      underline: false,
-      color: (subEl as any).color || '#0F172A'
+      width: (subEl as any).width || 700,
+      height: (subEl as any).height || subHeight,
+      fontSize: finalSubFontSize,
+      align: (subEl as any).align || 'center',
+      bold: (subEl as any).bold !== undefined ? (subEl as any).bold : true,
+      italic: (subEl as any).italic !== undefined ? (subEl as any).italic : false,
+      underline: (subEl as any).underline !== undefined ? (subEl as any).underline : false,
+      color: (subEl as any).color || '#0F172A',
+      fontFamily: (subEl as any).fontFamily || 'Poppins',
+      lineHeight: (subEl as any).lineHeight || 1.35,
+      letterSpacing: (subEl as any).letterSpacing !== undefined ? (subEl as any).letterSpacing : 0
     } as any);
-    currentY += subHeight + 4;
+    currentY += ((subEl as any).height || subHeight) + 4;
   }
 
   if (hostEl) {
+    const userHostFontSize = (hostEl as any).fontSize;
+    const finalHostFontSize = (userHostFontSize !== undefined && !isNaN(Number(userHostFontSize))) ? Number(userHostFontSize) : 9.5;
+
     realignedContent.push({
       ...hostEl,
-      x: 50,
+      x: (hostEl as any).x !== undefined ? (hostEl as any).x : 50,
       y: currentY,
-      width: 700,
-      height: 18,
-      fontSize: 9.5,
-      align: 'center',
-      italic: true,
-      bold: true,
-      underline: false,
-      color: (hostEl as any).color || '#EA580C'
+      width: (hostEl as any).width || 700,
+      height: (hostEl as any).height || 18,
+      fontSize: finalHostFontSize,
+      align: (hostEl as any).align || 'center',
+      italic: (hostEl as any).italic !== undefined ? (hostEl as any).italic : true,
+      bold: (hostEl as any).bold !== undefined ? (hostEl as any).bold : true,
+      underline: (hostEl as any).underline !== undefined ? (hostEl as any).underline : false,
+      color: (hostEl as any).color || '#EA580C',
+      fontFamily: (hostEl as any).fontFamily || 'Poppins',
+      lineHeight: (hostEl as any).lineHeight || 1.4
     } as any);
     currentY += 22;
   }
@@ -198,34 +223,49 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     const hasPhotos = photoEls.length > 0;
     const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
     const textLen = ((bodyEl as any).text || '').length;
-    const bodyFontSize = (hasPhotos && textLen > 650) ? 9.5 : 10.5;
+    const defaultBodyFontSize = (hasPhotos && textLen > 650) ? 9.5 : 10.5;
+    const userBodyFontSize = (bodyEl as any).fontSize;
+    const finalBodyFontSize = (userBodyFontSize !== undefined && !isNaN(Number(userBodyFontSize))) ? Number(userBodyFontSize) : defaultBodyFontSize;
+
     realignedContent.push({
       ...bodyEl,
-      x: 50,
+      x: (bodyEl as any).x !== undefined ? (bodyEl as any).x : 50,
       y: currentY,
-      width: 700,
-      height: bodyHeight,
-      fontSize: bodyFontSize,
-      align: 'left',
-      bold: false,
-      italic: false,
-      underline: false,
-      lineHeight: 1.5,
-      color: (bodyEl as any).color || '#334155'
+      width: (bodyEl as any).width || 700,
+      height: (bodyEl as any).height || bodyHeight,
+      fontSize: finalBodyFontSize,
+      align: (bodyEl as any).align || 'left',
+      bold: (bodyEl as any).bold !== undefined ? (bodyEl as any).bold : false,
+      italic: (bodyEl as any).italic !== undefined ? (bodyEl as any).italic : false,
+      underline: (bodyEl as any).underline !== undefined ? (bodyEl as any).underline : false,
+      lineHeight: (bodyEl as any).lineHeight || 1.5,
+      color: (bodyEl as any).color || '#334155',
+      fontFamily: (bodyEl as any).fontFamily || 'Georgia'
     } as any);
   }
 
   if (photoEls.length > 0) {
-    photoEls.slice(0, 3).forEach((photo, idx) => {
+    // Deduplicate photos by URL
+    const uniquePhotos: any[] = [];
+    const seenUrls = new Set<string>();
+    for (const ph of photoEls) {
+      const urlKey = ((ph as any).url || '').trim();
+      if (urlKey && !seenUrls.has(urlKey)) {
+        seenUrls.add(urlKey);
+        uniquePhotos.push(ph);
+      }
+    }
+
+    uniquePhotos.slice(0, 3).forEach((photo, idx) => {
       let x = 50;
       let y = 550;
       let width = 700;
       let height = 325;
-      if (photoEls.length === 1) {
+      if (uniquePhotos.length === 1) {
         x = 100; y = 550; width = 600; height = 325;
-      } else if (photoEls.length === 2) {
+      } else if (uniquePhotos.length === 2) {
         x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
-      } else if (photoEls.length >= 3) {
+      } else if (uniquePhotos.length >= 3) {
         x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
       }
       realignedContent.push({
