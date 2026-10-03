@@ -212,10 +212,7 @@ function extractTextFromBinaryDoc(arrayBuffer: ArrayBuffer): string {
 export function deduplicateSentences(text: string): string {
   if (!text) return '';
 
-  // Clean raw bullet points, symbols, and irregular spaces
   const cleaned = cleanAndSanitizeReportText(text);
-
-  // Split into sentences using punctuation boundaries
   const rawSentences = cleaned.split(/(?<=[.!?])\s+/);
   const uniqueSentences: string[] = [];
   const seenNorm = new Set<string>();
@@ -224,11 +221,9 @@ export function deduplicateSentences(text: string): string {
     const trimmed = s.trim();
     if (trimmed.length < 5) continue;
 
-    // Normalized key for comparison (lowercase alphanumeric only)
     const normKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (normKey.length < 4) continue;
 
-    // Check if this sentence is already seen or a duplicate/substring of an existing sentence
     let isDuplicate = false;
     for (const existing of seenNorm) {
       if (
@@ -294,7 +289,6 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
             const imgFile = zip.files[mediaPath];
             if (imgFile) {
               const base64 = await imgFile.async('base64');
-              // Filter out tiny icons (< 3KB)
               if (base64.length > 3000) {
                 mediaList.push({ path: mediaPath, size: base64.length, base64 });
               }
@@ -324,7 +318,6 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
           ) && p.endsWith('.xml')
         );
 
-        // Prioritize word/document.xml first
         xmlPaths.sort((a, b) => (a === 'word/document.xml' ? -1 : b === 'word/document.xml' ? 1 : 0));
 
         for (const xmlPath of xmlPaths) {
@@ -378,7 +371,6 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         for (let pageNum = 1; pageNum <= numPages; pageNum++) {
           const page = await pdfDoc.getPage(pageNum);
 
-          // Text content
           const textContent = await page.getTextContent();
           const items = textContent.items as Array<{
             str: string;
@@ -389,7 +381,6 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
           }>;
 
           if (items && items.length > 0) {
-            // Sort items: Top to bottom (Y descending), then Left to right (X ascending)
             const sortedItems = [...items].sort((a, b) => {
               const yA = a.transform[5];
               const yB = b.transform[5];
@@ -431,7 +422,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
             }
           }
 
-          // Extract genuine embedded photo XObjects
+          // Extract embedded raster photos
           try {
             const ops = await page.getOperatorList();
             for (let i = 0; i < ops.fnArray.length; i++) {
@@ -545,7 +536,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
     }
   }
 
-  // 5. Default Clean Safe Fallback (NEVER return raw binary garbage)
+  // 5. Default Clean Safe Fallback
   const cleanBaseName = file.name.replace(/\.[^/.]+$/, "").replace(/[_\-+]/g, ' ').trim();
   return {
     text: `Event Report: ${cleanBaseName}`,
@@ -560,7 +551,7 @@ export async function extractTextFromDocument(file: File): Promise<string> {
 
 /**
  * Universal NLP & Heuristic Parser for Any Academic / Department Event Report
- * Accurately extracts meaning, definitions, context, and key entities.
+ * Accurately extracts genuine content, meaning, definitions, context, and key entities from the currently uploaded file.
  */
 export function parseReportEntities(
   rawText: string,
@@ -577,7 +568,7 @@ export function parseReportEntities(
   let category = "workshop";
   if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("campus drive") || lower.includes("offer letter") || lower.includes("placed")) {
     category = "placement";
-  } else if (lower.includes("hackathon") || lower.includes("first place") || lower.includes("second place") || lower.includes("1st prize") || lower.includes("2nd prize") || lower.includes("trophy") || lower.includes("cash award") || lower.includes("competition winner") || lower.includes("achiever") || lower.includes("won the")) {
+  } else if (lower.includes("symposium") || lower.includes("hackathon") || lower.includes("techraga") || lower.includes("culturals") || lower.includes("first place") || lower.includes("second place") || lower.includes("1st prize") || lower.includes("2nd prize") || lower.includes("trophy") || lower.includes("cash award") || lower.includes("competition winner") || lower.includes("achiever") || lower.includes("won the") || lower.includes("events conducted")) {
     category = "student";
   } else if (lower.includes("faculty") || lower.includes("research paper") || lower.includes("journal publication") || lower.includes("scopus") || lower.includes("ieee") || lower.includes("springer") || lower.includes("patent") || lower.includes("impact factor") || lower.includes("author")) {
     category = "faculty";
@@ -589,11 +580,13 @@ export function parseReportEntities(
     category = "custom";
   }
 
-  // 2. Event Title Extraction (with strict junk rejection)
+  // 2. Event Title Extraction (with strict colon & symbol stripping)
   let title = "";
   const titlePatterns = [
     /(?:Event Title|Title of the Event|Name of the Event|Topic|Theme|Project Title|Paper Title|Event Name)\s*[:\-\s]*\s*([^\n\r]+?)(?=\s*(?:Organizing Body|Collaborations|Details of|Resource Person|Speaker|Organizing Department|Nature of|Event Date|Date|Venue|Time|\n\n|$))/i,
     /CAMPUS TO CAREER SERIES[^\n\r]*/i,
+    /(?:National|International|State)?\s*Level\s*(?:Technical\s*)?(?:Symposium|Fest|Conference|Workshop)\s*[:\-\s]*\s*([^\n\r]+)/i,
+    /TECHRAGA\s*\d*[^\n\r]*/i,
     /Guest Lecture on\s+([^\n\r]+)/i,
     /Workshop on\s+([^\n\r]+)/i,
     /Seminar on\s+([^\n\r]+)/i,
@@ -605,8 +598,8 @@ export function parseReportEntities(
 
   for (const regex of titlePatterns) {
     const m = sanitizedText.match(regex);
-    if (m && m[1] && m[1].trim().length > 3) {
-      const candidate = m[1].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
+    if (m && m[1] && m[1].trim().length > 2) {
+      const candidate = m[1].trim().replace(/^[:\-\s•\*\.]+|[:\-\s•\*\.]+$/g, '').trim();
       const candLower = candidate.toLowerCase();
       if (!isBinaryOrXmlJunk(candidate) &&
           !candidate.includes('/') &&
@@ -620,8 +613,8 @@ export function parseReportEntities(
         title = candidate;
         break;
       }
-    } else if (m && m[0] && m[0].trim().length > 4) {
-      const candidate = m[0].trim().replace(/^[-:•\s]+/, '').replace(/[-:•\s]+$/, '');
+    } else if (m && m[0] && m[0].trim().length > 3) {
+      const candidate = m[0].trim().replace(/^[:\-\s•\*\.]+|[:\-\s•\*\.]+$/g, '').trim();
       const candLower = candidate.toLowerCase();
       if (!isBinaryOrXmlJunk(candidate) &&
           !candidate.includes('/') &&
@@ -640,7 +633,7 @@ export function parseReportEntities(
 
   // Fallback title extraction from topic matches or clean lines
   const isGenericTitle = !title || 
-    title.length < 4 || 
+    title.length < 3 || 
     isBinaryOrXmlJunk(title) ||
     title.includes('/') ||
     title.toLowerCase().includes("example report") || 
@@ -651,19 +644,19 @@ export function parseReportEntities(
     title.includes("VERSION:");
 
   if (isGenericTitle) {
-    const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on)\s+["']?([^"'\n\r\.]+)/i) ||
+    const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on|organized a symposium titled|organized)\s+["']?([^"'\n\r\.]+)/i) ||
                        sanitizedText.match(/(?:CAMPUS TO CAREER SERIES[^\n\r]*)/i) ||
                        sanitizedText.match(/(?:Topic|Theme|Subject|Event Name|Title)\s*[:\-\s]*\s*([^\n\r]+)/i);
     if (topicMatch && (topicMatch[1] || topicMatch[0])) {
-      const cand = (topicMatch[1] || topicMatch[0]).trim().replace(/^["']|["']$/g, '');
+      const cand = (topicMatch[1] || topicMatch[0]).trim().replace(/^["':\-\s•]+|["':\-\s•]+$/g, '');
       if (!isBinaryOrXmlJunk(cand) && !cand.includes('/')) {
         title = cand;
       }
     }
     
     if (!title || isBinaryOrXmlJunk(title)) {
-      const lines = sanitizedText.split('\n').map(l => l.trim()).filter(l => 
-        l.length > 6 && l.length < 110 && 
+      const lines = sanitizedText.split('\n').map(l => l.replace(/^[:\-\s•\*\.]+|[:\-\s•\*\.]+$/g, '').trim()).filter(l => 
+        l.length > 4 && l.length < 110 && 
         !isBinaryOrXmlJunk(l) &&
         !l.includes('/') &&
         !l.toLowerCase().includes("example report") &&
@@ -683,7 +676,8 @@ export function parseReportEntities(
     }
   }
 
-  title = title.toUpperCase().replace(/\s+/g, ' ').trim();
+  // Strip all leading colons, quotes, and punctuation
+  title = title.replace(/^[:\-\s•\*\."']+|[:\-\s•\*\."']+$/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
 
   // 3. Resource Person / Speaker / Chief Guest / Student Achievers / Facilitator
   let student = "";
@@ -717,7 +711,7 @@ export function parseReportEntities(
       /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert|Student\(s\)?|Student Name|Students|Winners|Team Members|Recruiter|Company)\s*[:\-\s]+\s*([^\n\r]+)/i
     );
     if (singleLineMatch && singleLineMatch[1]) {
-      const cand = singleLineMatch[1].trim();
+      const cand = singleLineMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
       if (cand.length > 3 && !isBinaryOrXmlJunk(cand) && !cand.includes('/') && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("venue") && !cand.toLowerCase().startsWith("department")) {
         student = cand;
       }
@@ -744,19 +738,25 @@ export function parseReportEntities(
     student = student.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
   }
 
-  // 4. Dignitaries (Principal, Dean, HOD)
-  let principalName = "Dr. P. Geetha (Principal, KPRCAS)";
-  const princMatch = sanitizedText.match(/(?:Dr\.\s+P\.\s+Geetha)/i) ||
-                     sanitizedText.match(/(?:presided over by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Principal)?)/i);
-  if (princMatch && princMatch[1] && !isBinaryOrXmlJunk(princMatch[1])) {
-    principalName = princMatch[1].trim();
+  // 4. Dignitaries (ONLY IF EXPLICITLY PRESENT IN THIS DOCUMENT)
+  let principalName = "";
+  if (lower.includes("geetha")) {
+    principalName = "Dr. P. Geetha (Principal, KPRCAS)";
+  } else {
+    const princMatch = sanitizedText.match(/(?:presided over by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Principal)?)/i);
+    if (princMatch && princMatch[1] && !isBinaryOrXmlJunk(princMatch[1])) {
+      principalName = princMatch[1].trim();
+    }
   }
 
-  let deanName = "Dr. P. Sharmila (Dean – SoCS)";
-  const deanMatch = sanitizedText.match(/(?:Dr\.\s+P\.\s+Sharmila)/i) ||
-                    sanitizedText.match(/(?:felicitated by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Dean)?)/i);
-  if (deanMatch && deanMatch[1] && !isBinaryOrXmlJunk(deanMatch[1])) {
-    deanName = deanMatch[1].trim();
+  let deanName = "";
+  if (lower.includes("sharmila")) {
+    deanName = "Dr. P. Sharmila (Dean – SoCS)";
+  } else {
+    const deanMatch = sanitizedText.match(/(?:felicitated by\s+)?(Dr\.\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?\s+[A-Z][a-z]+(?:,\s*Dean)?)/i);
+    if (deanMatch && deanMatch[1] && !isBinaryOrXmlJunk(deanMatch[1])) {
+      deanName = deanMatch[1].trim();
+    }
   }
 
   let hodName = "";
@@ -776,7 +776,7 @@ export function parseReportEntities(
   let classDept = "";
   const deptMatch = sanitizedText.match(/(?:Organizing Department|Department of|Dept\. of)[:\s]+([^\n\r]+)/i);
   if (deptMatch && deptMatch[1]) {
-    const deptFound = deptMatch[1].trim();
+    const deptFound = deptMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (!isBinaryOrXmlJunk(deptFound) && !deptFound.toLowerCase().startsWith("date") && !deptFound.toLowerCase().startsWith("venue")) {
       classDept = deptFound.toUpperCase();
     }
@@ -790,11 +790,11 @@ export function parseReportEntities(
     }
   }
 
-  // 7. Team Name / Collaborations
+  // 7. Team Name / Collaborations / Association
   let teamName = "";
   const collabMatch = sanitizedText.match(/(?:Collaborations|Organizing Body|Sponsored by|Association|Club|In Association with)(?:\s*\(If any\))?[:\s]+([^\n\r]+)/i);
   if (collabMatch && collabMatch[1] && collabMatch[1].trim().length > 3 && !collabMatch[1].includes("-") && !collabMatch[1].toLowerCase().startsWith("nil") && !isBinaryOrXmlJunk(collabMatch[1])) {
-    teamName = collabMatch[1].trim();
+    teamName = collabMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
   } else {
     const teamMatch = sanitizedText.match(/(?:team name:?|team:?|team name is)\s*([^.,;\n]{2,50})/i);
     if (teamMatch && !isBinaryOrXmlJunk(teamMatch[1])) {
@@ -802,96 +802,126 @@ export function parseReportEntities(
     }
   }
 
-  // 8. Event Date
-  let date = "August 2025";
-  const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)[:\s]+([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})/i) ||
-                    sanitizedText.match(/\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{4}\b/);
+  // 8. Event Date (ONLY IF FOUND IN CURRENT DOCUMENT)
+  let date = "";
+  const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)[:\s]+([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},?\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{4})/i) ||
+                    sanitizedText.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}\b/);
   if (dateMatch) {
-    const foundDate = (dateMatch[1] || dateMatch[0]).trim();
+    const foundDate = (dateMatch[1] || dateMatch[0]).trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (!foundDate.includes("18/02/2022") && !foundDate.includes("01/01/1970") && !isBinaryOrXmlJunk(foundDate)) {
       date = foundDate;
     }
   }
 
-  // 9. Venue & Attendance
-  let venue = "Seminar Hall";
-  const venueMatch = sanitizedText.match(/Venue[:\s]+([^\n\r,]+)/i);
+  // 9. Venue & Attendance (ONLY IF FOUND IN CURRENT DOCUMENT)
+  let venue = "";
+  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab)[:\s]+([^\n\r,]+)/i);
   if (venueMatch && venueMatch[1] && !isBinaryOrXmlJunk(venueMatch[1])) {
-    venue = venueMatch[1].trim();
+    const vCandidate = venueMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
+    if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time")) {
+      venue = vCandidate;
+    }
   }
 
   let participantInfo = "";
-  const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Attendance)[:\s]+(\d+)/i);
-  if (partMatch) {
-    participantInfo = `with active participation from over ${partMatch[1]} students and faculty members`;
+  const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Total Participants|Attendance)[:\s]+(\d+)/i) ||
+                    sanitizedText.match(/(?:over|more than|around)\s+(\d+)\s+(?:students|participants|delegates)/i);
+  if (partMatch && partMatch[1]) {
+    participantInfo = `with active participation from over ${partMatch[1]} students`;
   }
 
-  // 10. Purpose, Detailed Summary & Outcomes (Definition & Meaning)
+  // 10. Extract Genuine Document Content Paragraphs
   let purpose = "";
-  const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Objective\(s\)?|Aim of the Event|Abstract)[:\s]+([\s\S]*?)(?=Summary of the Event|Outcome of the Event|Date|Venue|Proceedings|$)/i);
+  const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Objective\(s\)?|Aim of the Event|Abstract)[:\s]+([\s\S]*?)(?=Summary of the Event|Outcome of the Event|Events Conducted|Competitions|Date|Venue|Proceedings|$)/i);
   if (purposeMatch && purposeMatch[1] && !isBinaryOrXmlJunk(purposeMatch[1])) {
     purpose = purposeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let summary = "";
-  const summaryMatch = sanitizedText.match(/(?:Summary of the Event|Proceedings|Event Description|Executive Summary)[:\s]+([\s\S]*?)(?=Outcome of the Event|Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const summaryMatch = sanitizedText.match(/(?:Summary of the Event|Proceedings|Event Description|Executive Summary|Events Conducted|Event Details)[:\s]+([\s\S]*?)(?=Outcome of the Event|Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
   if (summaryMatch && summaryMatch[1] && !isBinaryOrXmlJunk(summaryMatch[1])) {
     summary = summaryMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let outcome = "";
-  const outcomeMatch = sanitizedText.match(/(?:Outcome of the Event|Key Outcomes|Feedback & Conclusion|Results)[:\s]+([\s\S]*?)(?=Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const outcomeMatch = sanitizedText.match(/(?:Outcome of the Event|Key Outcomes|Feedback & Conclusion|Results|Valedictory)[:\s]+([\s\S]*?)(?=Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
   if (outcomeMatch && outcomeMatch[1] && !isBinaryOrXmlJunk(outcomeMatch[1])) {
     outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
+  // Collect all descriptive body paragraphs from this specific uploaded document
+  const rawParagraphs = sanitizedText
+    .split(/\n\s*\n/)
+    .map(p => p.trim())
+    .filter(p => 
+      p.length > 35 &&
+      !isBinaryOrXmlJunk(p) &&
+      !p.toLowerCase().startsWith("kprcas") &&
+      !p.toLowerCase().startsWith("page ") &&
+      !p.toLowerCase().startsWith("signature ") &&
+      !p.toLowerCase().startsWith("prepared by") &&
+      !p.toLowerCase().startsWith("verified by") &&
+      !p.toLowerCase().startsWith("approved by")
+    );
+
   const award = teamName ? `Collaboration: ${teamName}` : `Department Academic Initiative`;
-  const host = `${principalName} & ${deanName}${hodName ? `, ${hodName} (HOD)` : ''}`;
-  const details = summary || purpose || sanitizedText.substring(0, 300);
+  const hostParts = [principalName, deanName, hodName ? `${hodName} (HOD)` : ''].filter(Boolean);
+  const host = hostParts.length > 0 ? hostParts.join(' & ') : '';
+  const details = summary || purpose || (rawParagraphs.length > 0 ? rawParagraphs.join(' ').substring(0, 350) : sanitizedText.substring(0, 300));
   const keywords = outcome ? outcome.substring(0, 200) : "Skill enhancement, technical capability, executive presentation, student participation";
 
-  // 11. Cohesive, Publication-Grade Article Synthesizer (Captures Exact Meaning & Definition)
+  // 11. Cohesive, Dynamic Article Synthesizer Faithful to CURRENT Uploaded Document
   const sentences: string[] = [];
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `DEPARTMENT OF ${classDept}`) : `DEPARTMENT OF ${defaultDepartment.toUpperCase()}`;
 
-  // Sentence 1: Lead opening
+  // Sentence 1: Dynamic Lead Opening
+  const dateClause = date ? ` on ${date}` : '';
+  const venueClause = venue ? ` at the ${venue}` : '';
+  const partClause = participantInfo ? ` ${participantInfo}` : '';
+  const teamClause = teamName ? ` in collaboration with ${teamName},` : '';
+
   sentences.push(
-    `The ${deptDisplayName}, KPRCAS, ${teamName ? `in collaboration with ${teamName}, ` : ''}successfully organized the academic program titled "${title}" on ${date} at the ${venue}${participantInfo ? ` ${participantInfo}` : ''}.`
+    `The ${deptDisplayName}, KPRCAS,${teamClause} successfully organized the academic program titled "${title}"${dateClause}${venueClause}${partClause}.`
   );
 
-  // Sentence 2: Resource Person / Dignitary Keynote
+  // Sentence 2: Keynote / Resource Person / Leadership (Only if actually in document)
   if (student) {
     sentences.push(
-      `The session featured eminent Resource Person ${student}, who delivered an empowering keynote address and shared valuable practical insights with the attendees.`
+      `The session was led by ${student}, who delivered an insightful address and shared valuable practical perspectives with the participants.`
     );
-  } else {
-    sentences.push(
-      `The program was presided over by ${principalName} and felicitated by ${deanName}.`
-    );
+  } else if (principalName || deanName) {
+    const leadNames = [principalName, deanName].filter(Boolean).join(' and ');
+    sentences.push(`The program was graced and presided over by ${leadNames}.`);
   }
 
-  // Sentence 3: Purpose & Detailed Summary
-  if (summary && summary.length > 25) {
+  // Sentence 3 & 4: Actual Details, Summary, and Purpose from CURRENT Document
+  if (summary && summary.length > 20) {
     sentences.push(summary);
   } else if (purpose && purpose.length > 15) {
     const cleanPurp = purpose.toLowerCase().startsWith('to ') ? purpose : `to ${purpose}`;
-    sentences.push(`The core objective of the program was ${cleanPurp}.`);
+    sentences.push(`The core objective of the initiative was ${cleanPurp}.`);
+  } else if (rawParagraphs.length > 0) {
+    // Extract actual narrative paragraphs from the uploaded text
+    const extraContent = rawParagraphs.slice(0, 2).join(' ');
+    if (extraContent.length > 30) {
+      sentences.push(extraContent);
+    }
   }
 
-  // Sentence 4: Key Outcomes & Practical Learning
+  // Sentence 5: Outcomes & Impact from CURRENT Document
   if (outcome && outcome.length > 15) {
     sentences.push(`Key outcomes achieved: ${outcome}.`);
   } else {
-    sentences.push(`The interactive session enabled participants to gain practical knowledge, build industry-ready skills, and develop greater academic excellence.`);
+    sentences.push(`The interactive program enabled participants to acquire hands-on domain competencies and enhanced academic understanding.`);
   }
 
   if (studentAnchors) {
     sentences.push(`Student coordinators (${studentAnchors}) actively coordinated the proceedings.`);
   }
 
-  // Sentence 5: Concluding appreciation
+  // Closing Sentence
   sentences.push(
-    `The Principal, Dean, and Department Faculty members warmly commended all organizers, resource delegates, and student participants for making the event a grand success.`
+    `The department faculty members and organizers warmly commended all attendees and student participants for making ${title} a grand success.`
   );
 
   const rawArticle = sentences.join(' ');
@@ -903,7 +933,7 @@ export function parseReportEntities(
     teamName,
     student,
     classDept,
-    date,
+    date: date || "Current Academic Year",
     award,
     host,
     details: details.substring(0, 350),

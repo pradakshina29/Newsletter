@@ -752,26 +752,32 @@ public class AiController {
         String cKey = cleanValue(keywords);
 
         if (cEvent.isEmpty() || cEvent.equalsIgnoreCase("example report")) cEvent = "Department Academic Event";
-        if (cDate.isEmpty()) cDate = "KPRCAS";
-        if (cPerson.isEmpty() || cPerson.equalsIgnoreCase("distinguished resource person")) cPerson = "Subject Expert & Key Speaker";
-        if (cPart.isEmpty()) cPart = "Department Students";
+        String dateClause = !cDate.isEmpty() ? " on " + cDate : "";
+        if (cPerson.isEmpty() || cPerson.equalsIgnoreCase("distinguished resource person")) cPerson = "";
+        if (cPart.isEmpty()) cPart = "students and faculty members";
 
         List<String> lines = new ArrayList<>();
 
         if ("shorter".equalsIgnoreCase(tone)) {
-            lines.add(cEvent + " was successfully conducted at " + cDate + ".");
-            lines.add("The initiative was led by " + cPerson + " with enthusiastic participation from " + cPart + ".");
+            lines.add(cEvent + " was successfully conducted" + dateClause + ".");
+            if (!cPerson.isEmpty()) {
+                lines.add("The initiative was led by " + cPerson + " with enthusiastic participation from " + cPart + ".");
+            } else {
+                lines.add("The initiative witnessed enthusiastic participation from " + cPart + ".");
+            }
             if (!cKey.isEmpty()) lines.add("Key highlights: " + cKey + ".");
             lines.add("The department congratulates all participants on their commendable effort.");
-        } else if (cCategory.contains("ACHIEVEMENT") || cCategory.contains("AWARD") || cCategory.contains("PATENT")) {
-            lines.add("The Department organized the academic initiative titled \"" + cEvent + "\" hosted at " + cDate + ".");
-            lines.add("The student delegation (" + cPerson + ", " + cPart + ") actively represented the department.");
+        } else if (cCategory.contains("ACHIEVEMENT") || cCategory.contains("AWARD") || cCategory.contains("PATENT") || cCategory.contains("STUDENT")) {
+            lines.add("The Department successfully organized the academic initiative titled \"" + cEvent + "\"" + dateClause + ".");
+            if (!cPerson.isEmpty()) {
+                lines.add("The student delegation (" + cPerson + ") actively represented the department.");
+            }
             if (!cKey.isEmpty()) {
-                lines.add("Key project highlights included " + cKey + ".");
+                lines.add("Key event highlights included " + cKey + ".");
             }
             lines.add("The department warmly congratulates the students on their active participation and academic initiative!");
         } else if (cCategory.contains("PLACEMENT")) {
-            lines.add("The Department proudly celebrates the career success of students in the campus placement drive conducted by " + cEvent + " at " + cDate + ".");
+            lines.add("The Department proudly celebrates the career success of students in the campus placement drive conducted by " + cEvent + dateClause + ".");
             lines.add("A total of " + cPart + " candidates successfully cleared rigorous technical, coding, and interview rounds for " + cPerson + " roles with competitive salary packages.");
             if (!cKey.isEmpty()) {
                 lines.add("Selection highlights included " + cKey + ".");
@@ -780,8 +786,10 @@ public class AiController {
             }
             lines.add("The leadership team and faculty members extend their heartfelt congratulations and best wishes to all placed students as they step into promising corporate careers!");
         } else if (cCategory.contains("WORKSHOP") || cCategory.contains("SEMINAR") || cCategory.contains("SKILL")) {
-            lines.add("The Department organized an enriching technical workshop titled \"" + cEvent + "\" on " + cDate + ".");
-            lines.add("Esteemed resource person " + cPerson + " delivered insightful sessions providing practical, hands-on experience to " + cPart + ".");
+            lines.add("The Department organized an enriching technical workshop titled \"" + cEvent + "\"" + dateClause + ".");
+            if (!cPerson.isEmpty()) {
+                lines.add("Esteemed resource person " + cPerson + " delivered insightful sessions providing practical, hands-on experience to " + cPart + ".");
+            }
             if (!cKey.isEmpty()) {
                 lines.add("The comprehensive curriculum focused on " + cKey + ".");
             } else {
@@ -790,24 +798,26 @@ public class AiController {
             lines.add("Participants gained invaluable domain expertise and practical skills crucial for career excellence.");
             lines.add("The initiative received widespread appreciation from both students and faculty leadership.");
         } else if (cCategory.contains("RESEARCH") || cCategory.contains("PUBLICATION")) {
-            lines.add("In a major academic milestone, " + cPerson + " from the Department authored an impactful research paper titled \"" + cEvent + "\", published in " + cDate + ".");
+            String authorPart = !cPerson.isEmpty() ? cPerson + " from the Department" : "Department Faculty and Student Researchers";
+            lines.add("In a major academic milestone, " + authorPart + " authored an impactful research paper titled \"" + cEvent + "\"" + dateClause + ".");
             if (!cKey.isEmpty()) {
                 lines.add("The research contribution highlights " + cKey + ".");
             } else {
-                lines.add("The study introduces novel technological frameworks and analytical models in computer science.");
+                lines.add("The study introduces novel technological frameworks and analytical models.");
             }
-            lines.add("This prestigious academic recognition offers immense practical value, validating the department's research capabilities and commitment to scientific innovation.");
+            lines.add("This prestigious academic recognition validates the department's research capabilities and commitment to scientific innovation.");
             lines.add("The Department warmly congratulates the authors on this exemplary research achievement!");
         } else {
-            lines.add("The Department hosted \"" + cEvent + "\" on " + cDate + " with enthusiastic participation from " + cPart + ".");
-            lines.add("Graced by " + cPerson + ", the session inspired attendees through interactive tracks and visionary guidance.");
+            lines.add("The Department successfully organized \"" + cEvent + "\"" + dateClause + " with enthusiastic participation from " + cPart + ".");
+            if (!cPerson.isEmpty()) {
+                lines.add("Graced by " + cPerson + ", the session inspired attendees through interactive tracks and visionary guidance.");
+            }
             if (!cKey.isEmpty()) {
                 lines.add("Core program highlights centered on " + cKey + ".");
             } else {
                 lines.add("The initiative fostered vibrant teamwork, technical excellence, and active student engagement.");
             }
-            lines.add("During the presentation, participants received widespread appreciation from the leadership team for their initiative.");
-            lines.add("The management and faculty congratulate the organizers and participants for conducting a highly successful event!");
+            lines.add("The department congratulates the organizers and participants for conducting a highly successful event!");
         }
 
         String articleText = cleanValue(String.join(" ", lines));
@@ -921,6 +931,7 @@ public class AiController {
             }
         }
 
+        extractedTitle = extractedTitle.replaceAll("^[:\\-\\s•\\*\"']+", "").replaceAll("[:\\-\\s•\\*\"']+$", "").trim();
         if (extractedTitle.isEmpty()) {
             extractedTitle = category.substring(0, 1).toUpperCase() + category.substring(1) + " Activity";
         } else {
@@ -928,8 +939,8 @@ public class AiController {
         }
 
         // Extract Date: regex for month year or dates
-        String extractedDate = "June 2026";
-        Pattern datePattern = Pattern.compile("(?i)\\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{4}\\b");
+        String extractedDate = "";
+        Pattern datePattern = Pattern.compile("(?i)\\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\\s+\\d{1,2},?\\s+\\d{4}|\\d{1,2}\\s+(january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{4}|\\b\\d{1,2}[\\/\\-\\.]\\d{1,2}[\\/\\-\\.]\\d{4}\\b");
         Matcher dateMatcher = datePattern.matcher(text);
         if (dateMatcher.find()) {
             extractedDate = dateMatcher.group(0);
