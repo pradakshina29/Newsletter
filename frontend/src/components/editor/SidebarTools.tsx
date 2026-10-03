@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { Layout, Type, Image, Square, Upload, Sparkles, BookOpen, AlertCircle } from 'lucide-react';
 import { ProjectData } from '../../types/editor';
+import { extractDocumentContent } from '../../utils/documentParser';
 
 const TABS = [
   { id: 'templates', label: 'Templates', icon: Layout },
@@ -331,102 +332,7 @@ const SidebarTools: React.FC = () => {
     }
   };
 
-  const extractTextFromPdf = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = async (e) => {
-        try {
-          const buffer = e.target?.result as ArrayBuffer;
-          const uint8 = new Uint8Array(buffer);
-          const decoder = new TextDecoder('latin1');
-          const rawText = decoder.decode(uint8);
 
-          let textChunks: string[] = [];
-
-          const rawMatches = rawText.match(/\(([^()]{3,})\)/g);
-          if (rawMatches) {
-            rawMatches.forEach(m => {
-              const clean = m.slice(1, -1).replace(/\\\(|\r|\n/g, ' ').trim();
-              if (clean.length > 2 && !/^[\d\s.\\\/]+$/.test(clean) && !clean.toLowerCase().includes('font') && !clean.toLowerCase().includes('adobe')) {
-                textChunks.push(clean);
-              }
-            });
-          }
-
-          const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
-          let match: RegExpExecArray | null;
-
-          while ((match = streamRegex.exec(rawText)) !== null) {
-            try {
-              const streamContent = match[1];
-              const bytes = new Uint8Array(streamContent.length);
-              for (let i = 0; i < streamContent.length; i++) {
-                bytes[i] = streamContent.charCodeAt(i) & 0xff;
-              }
-
-              if (typeof DecompressionStream !== 'undefined') {
-                try {
-                  const deflateBytes = (bytes[0] === 0x78) ? bytes.subarray(2) : bytes;
-                  const ds = new DecompressionStream('deflate-raw');
-                  const writer = ds.writable.getWriter();
-                  writer.write(deflateBytes);
-                  writer.close();
-
-                  const response = new Response(ds.readable);
-                  const decompressedBuffer = await response.arrayBuffer();
-                  const decompressedText = new TextDecoder('utf-8').decode(decompressedBuffer);
-
-                  const streamMatches = decompressedText.match(/\(([^()]{3,})\)/g);
-                  if (streamMatches) {
-                    streamMatches.forEach(sm => {
-                      const clean = sm.slice(1, -1).replace(/\\\(|\r|\n/g, ' ').trim();
-                      if (clean.length > 2 && !/^[\d\s.\\\/]+$/.test(clean) && !clean.toLowerCase().includes('font')) {
-                        textChunks.push(clean);
-                      }
-                    });
-                  } else {
-                    const words = decompressedText.match(/[A-Za-z0-9\s.,'":;!\-–—]{4,}/g);
-                    if (words) {
-                      words.forEach(w => {
-                        const clean = w.trim();
-                        if (clean.length > 3 && !clean.includes('obj') && !clean.includes('stream') && !clean.includes('endstream')) {
-                          textChunks.push(clean);
-                        }
-                      });
-                    }
-                  }
-                } catch {
-                  // Stream inflate fallback
-                }
-              }
-            } catch {
-              // Ignore stream error
-            }
-          }
-
-          const uniqueText = Array.from(new Set(textChunks)).filter(s => s.length > 2);
-          if (uniqueText.length > 0) {
-            resolve(uniqueText.join('\n'));
-            return;
-          }
-
-          const wordsFallback = rawText.match(/[A-Za-z0-9\s.,'":;!\-–—]{4,}/g);
-          if (wordsFallback && wordsFallback.length > 0) {
-            const filtered = wordsFallback
-              .map(w => w.trim())
-              .filter(w => w.length > 3 && !w.includes('obj') && !w.includes('stream') && !w.includes('endstream') && !w.includes('PDF'));
-            resolve(filtered.slice(0, 150).join('\n'));
-            return;
-          }
-
-          resolve(`Newsletter format from PDF file: ${file.name}`);
-        } catch {
-          resolve(`Newsletter format from PDF file: ${file.name}`);
-        }
-      };
-      reader.readAsArrayBuffer(file);
-    });
-  };
 
   const handleUploadImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || !e.target.files[0]) return;
@@ -448,11 +354,8 @@ const SidebarTools: React.FC = () => {
         }
 
         let extractedText = file.name;
-        if (fileNameLower.endsWith('.pdf') || file.type === 'application/pdf') {
-          extractedText = await extractTextFromPdf(file);
-        } else {
-          extractedText = await file.text();
-        }
+        const res = await extractDocumentContent(file);
+        extractedText = res.text || file.name;
 
         const promptText = `Uploaded campus file: ${file.name}. Contents extracted: ${extractedText}. Please format and generate an 8-page newsletter based on this file content.`;
         

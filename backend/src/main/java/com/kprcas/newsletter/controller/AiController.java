@@ -819,11 +819,25 @@ public class AiController {
 
     @PostMapping("/parse-document")
     public ResponseEntity<?> parseDocument(@RequestBody Map<String, String> request) {
-        String text = request.getOrDefault("text", "").trim();
-        if (text.isEmpty()) {
+        String rawText = request.getOrDefault("text", "").trim();
+        if (rawText.isEmpty()) {
             Map<String, Object> err = new HashMap<>();
             err.put("error", "No text content provided to parse.");
             return ResponseEntity.badRequest().body(err);
+        }
+
+        String text = rawText
+            .replaceAll("(?i)PK[\\x00-\\x1F\\x7F-\\xFF]+\\[Content_Types\\][\\s\\S]*", "")
+            .replaceAll("(?i)(?:/[a-zA-Z0-9_\\-]+\\.xml|\\b[a-zA-Z0-9_\\-]+\\.xml(?:PK)?[\\x00-\\x1F\\x7F-\\xFF\\s\\>\\]\\:\\;]*)", " ")
+            .replaceAll("(?i)customxml/[^\\s]+", " ")
+            .replaceAll("(?i)word/(?:media|theme|fontTable|settings|webSettings|styles|numbering)[^\\s]*", " ")
+            .replaceAll("(?i)docProps/[^\\s]*", " ")
+            .replaceAll("[^\\x20-\\x7E\\s\\u00A0-\\u024F\\u0900-\\u0D7F]", " ")
+            .replaceAll("\\s+", " ")
+            .trim();
+
+        if (text.isEmpty()) {
+            text = rawText.replaceAll("[^\\x20-\\x7E\\s]", " ").trim();
         }
 
         String lower = text.toLowerCase();
@@ -861,6 +875,12 @@ public class AiController {
                 candidate = candidate.replaceAll("^[:\\-\\s•]+", "").replaceAll("[:\\-\\s•]+$", "").trim();
                 String candLower = candidate.toLowerCase();
                 if (candidate.length() > 4 && 
+                    !candLower.contains(".xml") &&
+                    !candLower.contains("pk") &&
+                    !candLower.contains("customxml") &&
+                    !candLower.contains("theme1") &&
+                    !candidate.contains("/") &&
+                    !candidate.contains("\\") &&
                     !candLower.contains("example report") && 
                     !candLower.contains("quality system") && 
                     !candLower.contains("report of the event") &&
@@ -878,6 +898,11 @@ public class AiController {
                 String trimmed = line.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
                 String tLower = trimmed.toLowerCase();
                 if (trimmed.length() > 6 && trimmed.length() < 120 &&
+                    !tLower.contains(".xml") &&
+                    !tLower.contains("pk") &&
+                    !tLower.contains("customxml") &&
+                    !trimmed.contains("/") &&
+                    !trimmed.contains("\\") &&
                     !tLower.contains("example report") &&
                     !tLower.contains("quality system") &&
                     !tLower.contains("report of the event") &&

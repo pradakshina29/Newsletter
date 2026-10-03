@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
-import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData } from '../../utils/documentParser';
+import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData, isBinaryOrXmlJunk } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
 
 
@@ -1170,9 +1170,14 @@ const ContentWizardPanel: React.FC = () => {
     if (!text) return '';
     return text
       .replace(/[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
+      .replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/gi, '')
+      .replace(/(?:\/[a-zA-Z0-9_\-]+\.xml|\b[a-zA-Z0-9_\-]+\.xml(?:PK)?[\x00-\x1F\x7F-\xFF\s\>\]\:\;]*)/gi, ' ')
+      .replace(/customxml\/[^\s]+/gi, ' ')
+      .replace(/word\/(?:media|theme|fontTable|settings|webSettings|styles|numbering)[^\s]*/gi, ' ')
+      .replace(/docProps\/[^\s]*/gi, ' ')
       .replace(/(?:JFIF|Exif|Photoshop|GIMP|CREATED WITH GIMP|ICC_PROFILE)[\s\S]*?(?=\s[A-Z]|\n|$)/gi, '')
       .replace(/JFIF|Exif|Photoshop|GIMP|CREATED WITH|ICC_PROFILE|\uFFFD/gi, '')
-      .replace(/[^\x20-\x7E\s\u00A0-\u024F]/g, '')
+      .replace(/[^\x20-\x7E\s\u00A0-\u024F\u0900-\u0D7F]/g, '')
       .replace(/\s+/g, ' ')
       .trim();
   };
@@ -1212,6 +1217,8 @@ const ContentWizardPanel: React.FC = () => {
           if (response.ok) {
             const rawData = await response.json();
             if (rawData.title && 
+                !isBinaryOrXmlJunk(rawData.title) &&
+                !rawData.title.includes('/') &&
                 !rawData.title.toLowerCase().includes("example report") && 
                 !rawData.title.toLowerCase().includes("quality system") && 
                 !rawData.title.toLowerCase().includes("report of the event") && 
@@ -1220,21 +1227,22 @@ const ContentWizardPanel: React.FC = () => {
               parsed.title = cleanParsedText(rawData.title);
             }
             if (rawData.category) parsed.category = rawData.category;
-            if (rawData.teamName && !rawData.teamName.toLowerCase().startsWith("nil")) {
+            if (rawData.teamName && !isBinaryOrXmlJunk(rawData.teamName) && !rawData.teamName.toLowerCase().startsWith("nil")) {
               parsed.teamName = cleanParsedText(rawData.teamName);
             }
             if (rawData.person || rawData.studentName) {
               const spk = cleanParsedText(rawData.person || rawData.studentName);
-              if (spk && !spk.toLowerCase().includes("distinguished resource person") && spk.length > 3) {
+              if (spk && !isBinaryOrXmlJunk(spk) && !spk.toLowerCase().includes("distinguished resource person") && spk.length > 3) {
                 parsed.student = spk;
               }
             }
-            if (rawData.className) parsed.classDept = cleanParsedText(rawData.className);
-            if (rawData.date && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) {
+            if (rawData.className && !isBinaryOrXmlJunk(rawData.className)) parsed.classDept = cleanParsedText(rawData.className);
+            if (rawData.date && !isBinaryOrXmlJunk(rawData.date) && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) {
               parsed.date = cleanParsedText(rawData.date);
             }
-            if (rawData.highlights) parsed.details = cleanParsedText(rawData.highlights);
+            if (rawData.highlights && !isBinaryOrXmlJunk(rawData.highlights)) parsed.details = cleanParsedText(rawData.highlights);
             if (rawData.article && 
+                !isBinaryOrXmlJunk(rawData.article) &&
                 !rawData.article.toLowerCase().includes("example report") && 
                 rawData.article.length > 80) {
               parsed.article = deduplicateSentences(cleanParsedText(rawData.article));
