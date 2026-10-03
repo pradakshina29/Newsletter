@@ -985,13 +985,51 @@ public class AiController {
             }
         }
 
+        // Extract Venue
+        String extractedVenue = "";
+        Pattern venuePattern = Pattern.compile("(?i)(?:Venue|Hall|Auditorium|Lab|Location|Premises)\\s*[:\\s]+\\s*([^\\n\\r,]+)");
+        Matcher venueMatcher = venuePattern.matcher(text);
+        if (venueMatcher.find()) {
+            String vCand = venueMatcher.group(1).trim().replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "").trim();
+            if (vCand.length() > 2 && !vCand.toLowerCase().startsWith("date") && !vCand.toLowerCase().startsWith("time") && !vCand.toLowerCase().startsWith("page")) {
+                extractedVenue = vCand;
+            }
+        }
+
+        // Extract Purpose, Summary, Outcome in full
+        String extractedPurpose = "";
+        Pattern purpPattern = Pattern.compile("(?i)(?:Purpose of the Event|Purpose|Objective\\(s\\)?|Objectives|Aim of the Event|Abstract|Background|Context|Theme & Concept)\\s*[:\\s]+\\s*([\\s\\S]*?)(?=(?:Summary of the Event|Summary|Proceedings|Events Conducted|Competitions|Outcome of the Event|Outcome|Target Audience|Venue|Date|HOD|Dean|Principal|Signature|$))");
+        Matcher purpMatcher = purpPattern.matcher(text);
+        if (purpMatcher.find()) {
+            extractedPurpose = purpMatcher.group(1).replaceAll("[\\r\\n]+", " ").replaceAll("\\s+", " ").trim();
+        }
+
+        String extractedSummary = "";
+        Pattern summPattern = Pattern.compile("(?i)(?:Summary of the Event|Summary|Proceedings|Event Description|Executive Summary|Events Conducted|Competition Details|Event Highlights|Detailed Report)\\s*[:\\s]+\\s*([\\s\\S]*?)(?=(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|$))");
+        Matcher summMatcher = summPattern.matcher(text);
+        if (summMatcher.find()) {
+            extractedSummary = summMatcher.group(1).replaceAll("[\\r\\n]+", " ").replaceAll("\\s+", " ").trim();
+        }
+
+        String extractedOutcome = "";
+        Pattern outPattern = Pattern.compile("(?i)(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\\s*[:\\s]+\\s*([\\s\\S]*?)(?=(?:Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|Page \\d+|$))");
+        Matcher outMatcher = outPattern.matcher(text);
+        if (outMatcher.find()) {
+            extractedOutcome = outMatcher.group(1).replaceAll("[\\r\\n]+", " ").replaceAll("\\s+", " ").trim();
+        }
+
         // Extract Highlights: summary of text
-        String extractedHighlights = cleanValue(text.length() > 350 ? text.substring(0, 350) + "..." : text);
+        String extractedHighlights = !extractedSummary.isEmpty() ? extractedSummary : 
+            cleanValue(text.length() > 350 ? text.substring(0, 350) + "..." : text);
 
         Map<String, Object> result = new HashMap<>();
         result.put("category", category);
         result.put("title", extractedTitle);
         result.put("date", extractedDate);
+        result.put("venue", extractedVenue);
+        result.put("purpose", extractedPurpose);
+        result.put("summary", extractedSummary);
+        result.put("outcome", extractedOutcome);
         result.put("person", extractedPerson);
         result.put("teamName", extractedTeamName);
         result.put("members", extractedMembers);
@@ -1000,22 +1038,43 @@ public class AiController {
         result.put("highlights", extractedHighlights);
         result.put("rawText", text);
 
-        // Generate ready-to-use article paragraph
-        Map<String, String> req = new HashMap<>();
-        req.put("category", category);
-        req.put("event", extractedTitle);
-        req.put("date", extractedDate);
-        req.put("resourcePerson", extractedPerson);
-        req.put("teamName", extractedTeamName);
-        req.put("members", extractedMembers);
-        req.put("className", extractedClassName);
-        req.put("keywords", extractedHighlights);
-        
-        ResponseEntity<?> artResp = generateNewsArticle(req);
-        if (artResp.getBody() instanceof Map) {
-            Map<?, ?> artMap = (Map<?, ?>) artResp.getBody();
-            result.put("article", artMap.get("article"));
+        // Synthesize full-fidelity rich article
+        List<String> articleSections = new ArrayList<>();
+        String deptClause = !extractedClassName.isEmpty() ? extractedClassName : "DEPARTMENT OF INFORMATION TECHNOLOGY";
+        String dateClause = !extractedDate.isEmpty() ? " on " + extractedDate : "";
+        String venueClause = !extractedVenue.isEmpty() ? " at " + extractedVenue : "";
+        String teamClause = !extractedTeamName.isEmpty() ? " in collaboration with " + extractedTeamName + "," : "";
+
+        StringBuilder leadBuilder = new StringBuilder();
+        leadBuilder.append("The ").append(deptClause).append(", KPRCAS,").append(teamClause)
+                   .append(" successfully organized the academic program titled \"").append(extractedTitle)
+                   .append("\"").append(dateClause).append(venueClause).append(".");
+
+        if (!extractedPerson.isEmpty()) {
+            leadBuilder.append(" The session was led by ").append(extractedPerson).append(", who shared valuable practical perspectives with the participants.");
         }
+
+        if (!extractedPurpose.isEmpty()) {
+            leadBuilder.append(" ").append(extractedPurpose);
+        }
+        articleSections.add(leadBuilder.toString());
+
+        if (!extractedSummary.isEmpty()) {
+            articleSections.add(extractedSummary);
+        }
+
+        StringBuilder conclusionBuilder = new StringBuilder();
+        if (!extractedOutcome.isEmpty()) {
+            conclusionBuilder.append("Key outcomes and competencies demonstrated: ").append(extractedOutcome).append(". ");
+        } else {
+            conclusionBuilder.append("The interactive program enabled participants to acquire hands-on domain competencies and enhanced academic understanding. ");
+        }
+        conclusionBuilder.append("The department faculty members and organizers warmly commended all attendees and student participants for making ")
+                         .append(extractedTitle).append(" a grand success.");
+        articleSections.add(conclusionBuilder.toString());
+
+        String generatedFullArticle = cleanValue(String.join("\n\n", articleSections));
+        result.put("article", generatedFullArticle);
 
         return ResponseEntity.ok(result);
     }

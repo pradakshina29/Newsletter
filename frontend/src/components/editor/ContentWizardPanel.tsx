@@ -1234,11 +1234,14 @@ const ContentWizardPanel: React.FC = () => {
             if (rawData.date && !isBinaryOrXmlJunk(rawData.date) && !rawData.date.includes("18/02/2022") && !rawData.date.includes("01/01/1970")) {
               parsed.date = cleanParsedText(rawData.date);
             }
+            if (rawData.venue && !isBinaryOrXmlJunk(rawData.venue)) {
+              parsed.venue = cleanParsedText(rawData.venue);
+            }
             if (rawData.highlights && !isBinaryOrXmlJunk(rawData.highlights)) parsed.details = cleanParsedText(rawData.highlights);
             if (rawData.article && 
                 !isBinaryOrXmlJunk(rawData.article) &&
                 !rawData.article.toLowerCase().includes("example report") && 
-                rawData.article.length > 80) {
+                rawData.article.length > (parsed.article ? parsed.article.length : 80)) {
               parsed.article = deduplicateSentences(cleanParsedText(rawData.article));
             }
           }
@@ -1366,11 +1369,11 @@ const ContentWizardPanel: React.FC = () => {
 
       currentY += titleHeight + 8;
 
-      // 2. Subtitle / Resource Person & Event Date Banner
+      // 2. Subtitle / Resource Person & Event Date Banner (Dynamic: Only show what is actually present)
       const subParts = [
         reportConfirmData.student ? `Resource Person: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
-        reportConfirmData.date ? `Date: ${reportConfirmData.date}` : '',
-        `Venue: Seminar Hall`
+        reportConfirmData.date && reportConfirmData.date !== "Current Academic Year" ? `Date: ${reportConfirmData.date}` : '',
+        reportConfirmData.venue ? `Venue: ${detectAndFixCase(reportConfirmData.venue, 'title')}` : ''
       ].filter(Boolean);
 
       if (subParts.length > 0) {
@@ -3722,6 +3725,34 @@ const ContentWizardPanel: React.FC = () => {
                     value={reportConfirmData.classDept}
                     onChange={e => setReportConfirmData({ ...reportConfirmData, classDept: e.target.value })}
                     placeholder="e.g. III B.SC IT 'B' / II BCA"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                    Event Date (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reportConfirmData.date || ''}
+                    onChange={e => setReportConfirmData({ ...reportConfirmData, date: e.target.value })}
+                    placeholder="e.g. 23/09/2026 or 23/09/2026 to 24/09/2026"
+                    className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-extrabold text-slate-500 uppercase tracking-wider block mb-1">
+                    Venue (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={reportConfirmData.venue || ''}
+                    onChange={e => setReportConfirmData({ ...reportConfirmData, venue: e.target.value })}
+                    placeholder="e.g. KPRCAS Campus / Auditorium"
                     className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
                   />
                 </div>

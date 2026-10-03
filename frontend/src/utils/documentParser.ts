@@ -22,6 +22,10 @@ export interface ParsedReportData {
   student: string;
   classDept: string;
   date: string;
+  venue: string;
+  purpose: string;
+  summary: string;
+  outcome: string;
   award: string;
   host: string;
   details: string;
@@ -75,8 +79,8 @@ export function cleanAndSanitizeReportText(rawText: string): string {
     .replace(/[\uE000-\uF8FF\uFFF0-\uFFFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ')
     // 3. Strip geometric shapes & square boxes (□, ■, ▲, etc.)
     .replace(/[\u25A0-\u25FF\u2500-\u257F]/g, ' ')
-    // 4. Strip bullet symbols and messy punctuation markers
-    .replace(/[•●○◦▪▫\*\-_–—~|]+/g, ' ')
+    // 4. Strip bullet symbols and messy punctuation markers while preserving standard word hyphens
+    .replace(/[•●○◦▪▫~|]+/g, ' ')
     // 5. Clean common institutional boilerplate lines
     .replace(/KPRCAS\/IQAC\/[^\n]*/gi, '')
     .replace(/VERSION:\s*\d+[^\n]*/gi, '')
@@ -586,7 +590,7 @@ export function parseReportEntities(
     /(?:Event Title|Title of the Event|Name of the Event|Topic|Theme|Project Title|Paper Title|Event Name)\s*[:\-\s]*\s*([^\n\r]+?)(?=\s*(?:Organizing Body|Collaborations|Details of|Resource Person|Speaker|Organizing Department|Nature of|Event Date|Date|Venue|Time|\n\n|$))/i,
     /CAMPUS TO CAREER SERIES[^\n\r]*/i,
     /(?:National|International|State)?\s*Level\s*(?:Technical\s*)?(?:Symposium|Fest|Conference|Workshop)\s*[:\-\s]*\s*([^\n\r]+)/i,
-    /TECHRAGA\s*\d*[^\n\r]*/i,
+    /TECHRAGA\s*'?\d*[^\n\r]*/i,
     /Guest Lecture on\s+([^\n\r]+)/i,
     /Workshop on\s+([^\n\r]+)/i,
     /Seminar on\s+([^\n\r]+)/i,
@@ -802,10 +806,10 @@ export function parseReportEntities(
     }
   }
 
-  // 8. Event Date (ONLY IF FOUND IN CURRENT DOCUMENT)
+  // 8. Event Date (ONLY IF FOUND IN CURRENT DOCUMENT, with date range support)
   let date = "";
-  const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)[:\s]+([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{1,2},?\s+[0-9]{4}|[A-Za-z]+\s+[0-9]{4})/i) ||
-                    sanitizedText.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}\b/);
+  const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)\s*[:\s]+\s*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}(?:\s*(?:to|-)\s*[0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4})?|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}(?:\s*(?:to|-)\s*[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})?|[A-Za-z]+\s+[0-9]{1,2}(?:,\s*[0-9]{4})?(?:\s*(?:to|-)\s*[A-Za-z]+\s+[0-9]{1,2},?\s+[0-9]{4})?|[A-Za-z]+\s+[0-9]{4})/i) ||
+                    sanitizedText.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}(?:\s*(?:to|-)\s*\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})?\b/);
   if (dateMatch) {
     const foundDate = (dateMatch[1] || dateMatch[0]).trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (!foundDate.includes("18/02/2022") && !foundDate.includes("01/01/1970") && !isBinaryOrXmlJunk(foundDate)) {
@@ -815,10 +819,10 @@ export function parseReportEntities(
 
   // 9. Venue & Attendance (ONLY IF FOUND IN CURRENT DOCUMENT)
   let venue = "";
-  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab)[:\s]+([^\n\r,]+)/i);
+  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\n\r,]+)/i);
   if (venueMatch && venueMatch[1] && !isBinaryOrXmlJunk(venueMatch[1])) {
     const vCandidate = venueMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
-    if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time")) {
+    if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time") && !vCandidate.toLowerCase().startsWith("page")) {
       venue = vCandidate;
     }
   }
@@ -830,23 +834,23 @@ export function parseReportEntities(
     participantInfo = `with active participation from over ${partMatch[1]} students`;
   }
 
-  // 10. Extract Genuine Document Content Paragraphs
+  // 10. Extract Genuine Document Content Sections in FULL
   let purpose = "";
-  const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Objective\(s\)?|Aim of the Event|Abstract)[:\s]+([\s\S]*?)(?=Summary of the Event|Outcome of the Event|Events Conducted|Competitions|Date|Venue|Proceedings|$)/i);
+  const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim of the Event|Abstract|Background|Context|Theme & Concept)\s*[:\s]+\s*([\s\S]*?)(?=(?:Summary of the Event|Summary|Proceedings|Events Conducted|Competitions|Outcome of the Event|Outcome|Target Audience|Venue|Date|HOD|Dean|Principal|Signature|$))/i);
   if (purposeMatch && purposeMatch[1] && !isBinaryOrXmlJunk(purposeMatch[1])) {
     purpose = purposeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let summary = "";
-  const summaryMatch = sanitizedText.match(/(?:Summary of the Event|Proceedings|Event Description|Executive Summary|Events Conducted|Event Details)[:\s]+([\s\S]*?)(?=Outcome of the Event|Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const summaryMatch = sanitizedText.match(/(?:Summary of the Event|Summary|Proceedings|Event Description|Executive Summary|Events Conducted|Competition Details|Event Highlights|Detailed Report)\s*[:\s]+\s*([\s\S]*?)(?=(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|$))/i);
   if (summaryMatch && summaryMatch[1] && !isBinaryOrXmlJunk(summaryMatch[1])) {
-    summary = summaryMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    summary = summaryMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   let outcome = "";
-  const outcomeMatch = sanitizedText.match(/(?:Outcome of the Event|Key Outcomes|Feedback & Conclusion|Results|Valedictory)[:\s]+([\s\S]*?)(?=Geo-Tagged|Photographs|HOD|Dean|Principal|$)/i);
+  const outcomeMatch = sanitizedText.match(/(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\s*[:\s]+\s*([\s\S]*?)(?=(?:Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|Page \d+|$))/i);
   if (outcomeMatch && outcomeMatch[1] && !isBinaryOrXmlJunk(outcomeMatch[1])) {
-    outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/[•\*\-]/g, ' ').replace(/\s+/g, ' ').trim();
+    outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
   // Collect all descriptive body paragraphs from this specific uploaded document
@@ -861,70 +865,70 @@ export function parseReportEntities(
       !p.toLowerCase().startsWith("signature ") &&
       !p.toLowerCase().startsWith("prepared by") &&
       !p.toLowerCase().startsWith("verified by") &&
-      !p.toLowerCase().startsWith("approved by")
+      !p.toLowerCase().startsWith("approved by") &&
+      !p.toLowerCase().startsWith("event title") &&
+      !p.toLowerCase().startsWith("organizing department")
     );
 
   const award = teamName ? `Collaboration: ${teamName}` : `Department Academic Initiative`;
   const hostParts = [principalName, deanName, hodName ? `${hodName} (HOD)` : ''].filter(Boolean);
   const host = hostParts.length > 0 ? hostParts.join(' & ') : '';
   const details = summary || purpose || (rawParagraphs.length > 0 ? rawParagraphs.join(' ').substring(0, 350) : sanitizedText.substring(0, 300));
-  const keywords = outcome ? outcome.substring(0, 200) : "Skill enhancement, technical capability, executive presentation, student participation";
+  const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Cohesive, Dynamic Article Synthesizer Faithful to CURRENT Uploaded Document
-  const sentences: string[] = [];
+  // 11. Cohesive, Dynamic Full-Content Article Synthesizer Faithful to CURRENT Uploaded Document
+  const articleParagraphs: string[] = [];
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `DEPARTMENT OF ${classDept}`) : `DEPARTMENT OF ${defaultDepartment.toUpperCase()}`;
 
-  // Sentence 1: Dynamic Lead Opening
+  // Section A: Dynamic Lead Opening & Purpose Narrative
   const dateClause = date ? ` on ${date}` : '';
-  const venueClause = venue ? ` at the ${venue}` : '';
+  const venueClause = venue ? ` at ${venue}` : '';
   const partClause = participantInfo ? ` ${participantInfo}` : '';
   const teamClause = teamName ? ` in collaboration with ${teamName},` : '';
 
-  sentences.push(
-    `The ${deptDisplayName}, KPRCAS,${teamClause} successfully organized the academic program titled "${title}"${dateClause}${venueClause}${partClause}.`
-  );
+  let leadText = `The ${deptDisplayName}, KPRCAS,${teamClause} successfully organized the academic program titled "${title}"${dateClause}${venueClause}${partClause}.`;
 
-  // Sentence 2: Keynote / Resource Person / Leadership (Only if actually in document)
   if (student) {
-    sentences.push(
-      `The session was led by ${student}, who delivered an insightful address and shared valuable practical perspectives with the participants.`
-    );
+    leadText += ` The session was led by ${student}, who delivered an insightful address and shared valuable practical perspectives with the participants.`;
   } else if (principalName || deanName) {
     const leadNames = [principalName, deanName].filter(Boolean).join(' and ');
-    sentences.push(`The program was graced and presided over by ${leadNames}.`);
+    leadText += ` The program was graced and presided over by ${leadNames}.`;
   }
 
-  // Sentence 3 & 4: Actual Details, Summary, and Purpose from CURRENT Document
+  if (purpose && purpose.length > 20) {
+    leadText += ` ${purpose}`;
+  }
+
+  articleParagraphs.push(leadText);
+
+  // Section B: Event Summary, Tracks, Proceedings & Competitions (Full details)
   if (summary && summary.length > 20) {
-    sentences.push(summary);
-  } else if (purpose && purpose.length > 15) {
-    const cleanPurp = purpose.toLowerCase().startsWith('to ') ? purpose : `to ${purpose}`;
-    sentences.push(`The core objective of the initiative was ${cleanPurp}.`);
+    articleParagraphs.push(summary);
   } else if (rawParagraphs.length > 0) {
-    // Extract actual narrative paragraphs from the uploaded text
-    const extraContent = rawParagraphs.slice(0, 2).join(' ');
-    if (extraContent.length > 30) {
-      sentences.push(extraContent);
+    // If no explicit summary header, incorporate substantive paragraphs
+    const substantiveBlocks = rawParagraphs.filter(p => !p.includes(title) && p.length > 40);
+    if (substantiveBlocks.length > 0) {
+      articleParagraphs.push(substantiveBlocks.join(' '));
     }
   }
 
-  // Sentence 5: Outcomes & Impact from CURRENT Document
+  // Section C: Outcomes, Impact & Closing Commendations
+  let conclusionText = "";
   if (outcome && outcome.length > 15) {
-    sentences.push(`Key outcomes achieved: ${outcome}.`);
+    conclusionText += `Key outcomes and competencies demonstrated: ${outcome}. `;
   } else {
-    sentences.push(`The interactive program enabled participants to acquire hands-on domain competencies and enhanced academic understanding.`);
+    conclusionText += `The interactive program enabled participants to acquire hands-on domain competencies and enhanced academic understanding. `;
   }
 
   if (studentAnchors) {
-    sentences.push(`Student coordinators (${studentAnchors}) actively coordinated the proceedings.`);
+    conclusionText += `Student coordinators (${studentAnchors}) actively coordinated the proceedings. `;
   }
 
-  // Closing Sentence
-  sentences.push(
-    `The department faculty members and organizers warmly commended all attendees and student participants for making ${title} a grand success.`
-  );
+  conclusionText += `The department faculty members and organizers warmly commended all attendees and student participants for making ${title} a grand success.`;
 
-  const rawArticle = sentences.join(' ');
+  articleParagraphs.push(conclusionText);
+
+  const rawArticle = articleParagraphs.join('\n\n');
   const article = deduplicateSentences(rawArticle);
 
   return {
@@ -933,7 +937,11 @@ export function parseReportEntities(
     teamName,
     student,
     classDept,
-    date: date || "Current Academic Year",
+    date: date || "",
+    venue: venue || "",
+    purpose,
+    summary,
+    outcome,
     award,
     host,
     details: details.substring(0, 350),

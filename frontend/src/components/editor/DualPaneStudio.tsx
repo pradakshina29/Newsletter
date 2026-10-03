@@ -76,8 +76,8 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
       // 2. Subtitle / Resource Person block
       const subParts = [
         parsedData.student ? `Resource Person: ${detectAndFixCase(parsedData.student, 'title')}` : '',
-        parsedData.date ? `Date: ${parsedData.date}` : '',
-        `Venue: Seminar Hall`
+        parsedData.date && parsedData.date !== "Current Academic Year" ? `Date: ${parsedData.date}` : '',
+        parsedData.venue ? `Venue: ${detectAndFixCase(parsedData.venue, 'title')}` : ''
       ].filter(Boolean);
 
       if (subParts.length > 0) {
