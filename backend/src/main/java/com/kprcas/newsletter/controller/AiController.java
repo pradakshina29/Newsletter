@@ -955,7 +955,18 @@ public class AiController {
         if (extractedTitle.isEmpty()) {
             extractedTitle = category.substring(0, 1).toUpperCase() + category.substring(1) + " Activity";
         } else {
-            extractedTitle = extractedTitle.toUpperCase();
+            // Trim long titles and sentences
+            String cleanT = extractedTitle.replaceAll("(?i)^(?:A\\s+|An\\s+|The\\s+)?(?:Report\\s+on\\s+|Activity\\s+report\\s+on\\s+|Event\\s+report\\s+on\\s+|Detailed\\s+report\\s+on\\s+)", "").trim();
+            Pattern tSplitPat = Pattern.compile("(?i)^(.+?)(?:\\s+(?:on|at|to\\s+recognize|to\\s+celebrate|held\\s+on|conducted\\s+on|organized\\s+on)\\s+(?:\\d{1,2}|the\\s+|KPRCAS|College|recognize|appreciate))");
+            Matcher tMat = tSplitPat.matcher(cleanT);
+            if (tMat.find() && tMat.group(1).trim().length() >= 4) {
+                cleanT = tMat.group(1).trim();
+            }
+            String[] words = cleanT.split("\\s+");
+            if (words.length > 8 || cleanT.length() > 65) {
+                cleanT = String.join(" ", Arrays.copyOfRange(words, 0, Math.min(words.length, 7)));
+            }
+            extractedTitle = cleanT.toUpperCase().replaceAll("\\s+", " ").trim();
         }
 
         // Extract Date: regex for month year or dates
@@ -968,12 +979,14 @@ public class AiController {
 
         // Extract Person / Speaker / Students / Faculty / Resource Person
         String extractedPerson = "";
-        Pattern resBlock = Pattern.compile("(?i)(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\\(s\\)|Expert)\\s*[:\\-\\s]*\\s*([\\s\\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|\\n\\s*\\n|$))");
+        Pattern resBlock = Pattern.compile("(?i)(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\\(s\\)|Expert)\\s*[:\\-\\s]*\\s*([\\s\\S]*?)(?=(?:Organizing Department|Organizing Body|Nature of the Event|Event Date|Date|Venue|Time|Total number|Purpose|Summary|Outcome|Target Audience|1\\.\\s*Introduction|Head of the Department|Academic Year|\\n\\s*\\n|$))");
         Matcher resMatcher = resBlock.matcher(text);
         if (resMatcher.find()) {
             String cand = resMatcher.group(1).replaceAll("[\\r\\n]+", ", ").replaceAll("\\s+", " ").trim();
             cand = cand.replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "").replaceAll("(?i)^Name\\s*:\\s*", "").trim();
+            cand = cand.replaceAll("(?i)(?:Head of the Department|Academic Year|1\\.\\s*Introduction|Introduction|Objectives)[\\s\\S]*", "").trim();
             if (cand.length() > 3 && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("seminar") && !cand.toLowerCase().startsWith("department")) {
+                if (cand.length() > 80) cand = cand.substring(0, 80).replaceAll(",[^,]*$", "").trim();
                 extractedPerson = cand;
             }
         }
@@ -985,6 +998,7 @@ public class AiController {
                 String match = personMatcher.group(0).trim();
                 String matchLower = match.toLowerCase();
                 if (!matchLower.contains("geetha") && !matchLower.contains("sharmila") && !matchLower.contains("principal") && !matchLower.contains("dean")) {
+                    if (match.length() > 70) match = match.substring(0, 70).trim();
                     extractedPerson = match;
                     break;
                 }
@@ -1058,42 +1072,60 @@ public class AiController {
         result.put("highlights", extractedHighlights);
         result.put("rawText", text);
 
-        // Synthesize full-fidelity rich article
-        List<String> articleSections = new ArrayList<>();
+        // Synthesize publication-ready 8-9 line article (~120-160 words across 2 paragraphs)
         String deptClause = !extractedClassName.isEmpty() ? extractedClassName : "DEPARTMENT OF INFORMATION TECHNOLOGY";
         String dateClause = !extractedDate.isEmpty() ? " on " + extractedDate : "";
         String venueClause = !extractedVenue.isEmpty() ? " at " + extractedVenue : "";
         String teamClause = !extractedTeamName.isEmpty() ? " in collaboration with " + extractedTeamName + "," : "";
 
-        StringBuilder leadBuilder = new StringBuilder();
-        leadBuilder.append("The ").append(deptClause).append(", KPRCAS,").append(teamClause)
-                   .append(" successfully organized the academic program titled \"").append(extractedTitle)
-                   .append("\"").append(dateClause).append(venueClause).append(".");
+        // Paragraph 1: Lead, Speaker, and Core Purpose (~3-4 lines)
+        StringBuilder p1 = new StringBuilder();
+        p1.append("The ").append(deptClause).append(", KPRCAS,").append(teamClause)
+          .append(" organized the flagship program titled \"").append(extractedTitle)
+          .append("\"").append(dateClause).append(venueClause).append(".");
 
         if (!extractedPerson.isEmpty()) {
-            leadBuilder.append(" The session was led by ").append(extractedPerson).append(", who shared valuable practical perspectives with the participants.");
+            p1.append(" The occasion was graced by esteemed Chief Guest ").append(extractedPerson)
+              .append(", who delivered an inspiring address sharing key practical perspectives.");
         }
-
         if (!extractedPurpose.isEmpty()) {
-            leadBuilder.append(" ").append(extractedPurpose);
+            String purpCore = extractedPurpose.split("(?<=[.!?])\\s+")[0];
+            p1.append(" ").append(purpCore);
         }
-        articleSections.add(leadBuilder.toString());
 
+        // Paragraph 2: Core Highlights, Technical Acumen & Closing (~4-5 lines)
+        StringBuilder p2 = new StringBuilder();
         if (!extractedSummary.isEmpty()) {
-            articleSections.add(extractedSummary);
+            String cleanSumm = extractedSummary
+                .replaceAll("(?i)^(?:1\\.\\s*Introduction|2\\.\\s*Summary|Events Conducted|Summary of the Event)[:\\s]*", "")
+                .replaceAll("(?i)\\bDepartment\\s*:\\s*[^\\.]+\\.", "")
+                .replaceAll("(?i)\\bVenue\\s*:\\s*[^\\.]+\\.", "")
+                .replaceAll("(?i)\\bDate\\s*:\\s*[^\\.]+\\.", "")
+                .trim();
+            String[] sSentences = cleanSumm.split("(?<=[.!?])\\s+");
+            if (sSentences.length > 0 && sSentences[0].length() > 20) {
+                p2.append(sSentences[0]).append(" ");
+                if (sSentences.length > 1 && sSentences[1].length() > 20) {
+                    p2.append(sSentences[1]).append(" ");
+                }
+            }
         }
 
-        StringBuilder conclusionBuilder = new StringBuilder();
+        if (p2.length() == 0) {
+            p2.append("Participants engaged in intensive technical sessions and collaborative problem-solving tracks, demonstrating exemplary proficiency. ");
+        }
+
         if (!extractedOutcome.isEmpty()) {
-            conclusionBuilder.append("Key outcomes and competencies demonstrated: ").append(extractedOutcome).append(". ");
+            String outCore = extractedOutcome.split("(?<=[.!?])\\s+")[0].replaceAll("(?i)^(?:Key Outcomes|Outcome)[:\\s]*", "").trim();
+            p2.append("The initiative enabled participants to ").append(outCore.toLowerCase().startsWith("to ") ? outCore.substring(3) : outCore).append(". ");
         } else {
-            conclusionBuilder.append("The interactive program enabled participants to acquire hands-on domain competencies and enhanced academic understanding. ");
+            p2.append("The session enabled attendees to acquire practical domain competencies and valuable industry exposure. ");
         }
-        conclusionBuilder.append("The department faculty members and organizers warmly commended all attendees and student participants for making ")
-                         .append(extractedTitle).append(" a grand success.");
-        articleSections.add(conclusionBuilder.toString());
 
-        String generatedFullArticle = cleanValue(String.join("\n\n", articleSections));
+        p2.append("The department faculty and leadership warmly congratulated all participants and coordinators for making ")
+          .append(extractedTitle).append(" a grand success.");
+
+        String generatedFullArticle = cleanValue(p1.toString().trim() + "\n\n" + p2.toString().trim());
         result.put("article", generatedFullArticle);
 
         return ResponseEntity.ok(result);
