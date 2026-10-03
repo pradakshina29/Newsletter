@@ -49,9 +49,51 @@ export function isBinaryOrXmlJunk(str: string): boolean {
     s.includes('word/numbering') ||
     s.includes('docprops') ||
     s.includes('/theme') ||
+    s.includes('document.xml') ||
     str.includes('\uFFFD') ||
     /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/.test(str)
   );
+}
+
+/**
+ * Strips all Wingdings symbols (, , , ), square boxes (□, ■), bullet characters (•, *),
+ * XML tags, binary markers, and institutional header boilerplate from document text.
+ */
+export function cleanAndSanitizeReportText(rawText: string): string {
+  if (!rawText) return '';
+
+  return rawText
+    .replace(/\r\n/g, '\n')
+    // 1. Strip raw binary / ZIP / XML metadata
+    .replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/gi, '')
+    .replace(/(?:\/[a-zA-Z0-9_\-]+\.xml|\b[a-zA-Z0-9_\-]+\.xml(?:PK)?[\x00-\x1F\x7F-\xFF\s\>\]\:\;]*)/gi, ' ')
+    .replace(/customxml\/[^\s]+/gi, ' ')
+    .replace(/word\/(?:media|theme|fontTable|settings|webSettings|styles|numbering)[^\s]*/gi, ' ')
+    .replace(/docProps\/[^\s]*/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    // 2. Strip Unicode Private Use Area (Wingdings bullets like , , , , , ) and replacement chars
+    .replace(/[\uE000-\uF8FF\uFFF0-\uFFFF\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, ' ')
+    // 3. Strip geometric shapes & square boxes (□, ■, ▲, etc.)
+    .replace(/[\u25A0-\u25FF\u2500-\u257F]/g, ' ')
+    // 4. Strip bullet symbols and messy punctuation markers
+    .replace(/[•●○◦▪▫\*\-_–—~|]+/g, ' ')
+    // 5. Clean common institutional boilerplate lines
+    .replace(/KPRCAS\/IQAC\/[^\n]*/gi, '')
+    .replace(/VERSION:\s*\d+[^\n]*/gi, '')
+    .replace(/Quality System Document[^\n]*/gi, '')
+    .replace(/Report of the Event[^\n]*/gi, '')
+    .replace(/Event Report[^\n]*/gi, '')
+    .replace(/Activity Report[^\n]*/gi, '')
+    .replace(/KPR College of Arts Science and Research[^\n]*/gi, '')
+    .replace(/\(Affiliated to Bharathiar University[^\)]*\)/gi, '')
+    .replace(/Avinashi Road, Arasur[^\n]*/gi, '')
+    .replace(/Page \d+ of \d+/gi, '')
+    .replace(/Signature of the (?:Coordinator|HOD|Dean|Principal|Faculty)[^\n]*/gi, '')
+    .replace(/Prepared by[\s\S]*?Approved by/gi, '')
+    // 6. Normalize whitespace
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s*\n+/g, '\n\n')
+    .trim();
 }
 
 /**
@@ -97,7 +139,7 @@ function extractTextFromWordXml(xmlStr: string): string[] {
       }
     }
 
-    const cleanLine = decodeXmlEntities(textChunk).trim();
+    const cleanLine = cleanAndSanitizeReportText(decodeXmlEntities(textChunk));
     if (cleanLine.length > 0 && !isBinaryOrXmlJunk(cleanLine)) {
       lines.push(cleanLine);
     }
@@ -111,8 +153,9 @@ function extractTextFromWordXml(xmlStr: string): string[] {
     while ((tMatch = directTRegex.exec(xmlStr)) !== null) {
       currentBuf += (currentBuf ? ' ' : '') + decodeXmlEntities(tMatch[1]);
     }
-    if (currentBuf.trim() && !isBinaryOrXmlJunk(currentBuf)) {
-      lines.push(currentBuf.trim());
+    const cleanBuf = cleanAndSanitizeReportText(currentBuf);
+    if (cleanBuf.trim() && !isBinaryOrXmlJunk(cleanBuf)) {
+      lines.push(cleanBuf.trim());
     }
   }
 
@@ -143,7 +186,10 @@ function extractTextFromBinaryDoc(arrayBuffer: ArrayBuffer): string {
             !lower.includes('times new roman') && 
             !lower.includes('compobj') &&
             !isBinaryOrXmlJunk(currentChunk)) {
-          asciiChunks.push(currentChunk.trim());
+          const cleaned = cleanAndSanitizeReportText(currentChunk);
+          if (cleaned.length >= 4) {
+            asciiChunks.push(cleaned);
+          }
         }
       }
       currentChunk = '';
@@ -151,7 +197,10 @@ function extractTextFromBinaryDoc(arrayBuffer: ArrayBuffer): string {
   }
 
   if (currentChunk.trim().length >= 4 && !isBinaryOrXmlJunk(currentChunk)) {
-    asciiChunks.push(currentChunk.trim());
+    const cleaned = cleanAndSanitizeReportText(currentChunk);
+    if (cleaned.length >= 4) {
+      asciiChunks.push(cleaned);
+    }
   }
 
   return asciiChunks.join('\n');
@@ -164,11 +213,7 @@ export function deduplicateSentences(text: string): string {
   if (!text) return '';
 
   // Clean raw bullet points, symbols, and irregular spaces
-  const cleaned = text
-    .replace(/[•\*\-]\s*/g, '')
-    .replace(/[\r\n]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const cleaned = cleanAndSanitizeReportText(text);
 
   // Split into sentences using punctuation boundaries
   const rawSentences = cleaned.split(/(?<=[.!?])\s+/);
@@ -294,7 +339,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         const fullText = textParts.join('\n');
         if (fullText.trim().length > 10) {
           return {
-            text: fullText,
+            text: cleanAndSanitizeReportText(fullText),
             images: extractedImages.slice(0, 4)
           };
         }
@@ -311,7 +356,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         const docText = extractTextFromBinaryDoc(arrayBuffer);
         if (docText.trim().length > 15) {
           return {
-            text: docText,
+            text: cleanAndSanitizeReportText(docText),
             images: []
           };
         }
@@ -470,7 +515,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         const fullText = textChunks.join('\n\n');
         if (fullText.trim().length > 10) {
           return {
-            text: fullText,
+            text: cleanAndSanitizeReportText(fullText),
             images: extractedImages.slice(0, 4)
           };
         }
@@ -493,7 +538,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
             }
           } catch (_) {}
         }
-        return { text, images: [] };
+        return { text: cleanAndSanitizeReportText(text), images: [] };
       }
     } catch (textErr) {
       console.warn("Direct file.text() reading error:", textErr);
@@ -524,30 +569,8 @@ export function parseReportEntities(
 ): ParsedReportData {
   const cleanFileName = fileName.replace(/\.[^/.]+$/, "").replace(/[_\-+]/g, ' ').trim();
   
-  // 0. Binary & XML Scrubbing Guard: Strip all zip metadata, xml paths, binary markers
-  let text = (rawText || cleanFileName)
-    .replace(/\r\n/g, '\n')
-    .replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/gi, '')
-    .replace(/(?:\/[a-zA-Z0-9_\-]+\.xml|\b[a-zA-Z0-9_\-]+\.xml(?:PK)?[\x00-\x1F\x7F-\xFF\s\>\]\:\;]*)/gi, ' ')
-    .replace(/customxml\/[^\s]+/gi, ' ')
-    .replace(/word\/(?:media|theme|fontTable|settings|webSettings|styles|numbering)[^\s]*/gi, ' ')
-    .replace(/docProps\/[^\s]*/gi, ' ')
-    .replace(/[^\x20-\x7E\s\u00A0-\u024F\u0900-\u0D7F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  // Clean common institutional template headers to isolate event-specific data
-  const sanitizedText = text
-    .replace(/KPRCAS\/IQAC\/[^\n]*/gi, '')
-    .replace(/VERSION:\s*\d+[^\n]*/gi, '')
-    .replace(/Quality System Document/gi, '')
-    .replace(/Report of the Event/gi, '')
-    .replace(/Event Report/gi, '')
-    .replace(/Activity Report/gi, '')
-    .replace(/KPR College of Arts Science and Research/gi, '')
-    .replace(/\(Affiliated to Bharathiar University[^\)]*\)/gi, '')
-    .replace(/Avinashi Road, Arasur[^\n]*/gi, '');
-
+  // Clean, strip symbols, strip Wingdings bullets, and sanitize text
+  const sanitizedText = cleanAndSanitizeReportText(rawText || cleanFileName);
   const lower = sanitizedText.toLowerCase();
 
   // 1. Intelligent Category Detection

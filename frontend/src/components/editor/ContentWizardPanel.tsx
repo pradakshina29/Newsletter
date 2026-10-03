@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
-import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData, isBinaryOrXmlJunk } from '../../utils/documentParser';
+import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData, isBinaryOrXmlJunk, cleanAndSanitizeReportText } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
 
 
@@ -1165,16 +1165,10 @@ const ContentWizardPanel: React.FC = () => {
     }
   };
 
-  // Text Sanitizer to scrub binary junk, EXIF metadata, and replacement characters
+  // Text Sanitizer to scrub binary junk, symbols, EXIF metadata, and replacement characters
   const cleanParsedText = (text: string): string => {
     if (!text) return '';
-    return text
-      .replace(/[\uFFFD\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '')
-      .replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/gi, '')
-      .replace(/(?:\/[a-zA-Z0-9_\-]+\.xml|\b[a-zA-Z0-9_\-]+\.xml(?:PK)?[\x00-\x1F\x7F-\xFF\s\>\]\:\;]*)/gi, ' ')
-      .replace(/customxml\/[^\s]+/gi, ' ')
-      .replace(/word\/(?:media|theme|fontTable|settings|webSettings|styles|numbering)[^\s]*/gi, ' ')
-      .replace(/docProps\/[^\s]*/gi, ' ')
+    return cleanAndSanitizeReportText(text)
       .replace(/(?:JFIF|Exif|Photoshop|GIMP|CREATED WITH GIMP|ICC_PROFILE)[\s\S]*?(?=\s[A-Z]|\n|$)/gi, '')
       .replace(/JFIF|Exif|Photoshop|GIMP|CREATED WITH|ICC_PROFILE|\uFFFD/gi, '')
       .replace(/[^\x20-\x7E\s\u00A0-\u024F\u0900-\u0D7F]/g, '')
