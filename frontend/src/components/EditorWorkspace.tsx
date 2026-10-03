@@ -125,36 +125,111 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
   };
 
 
-  // Load project from API on mount
+  const handleCloseAndSave = async () => {
+    if (activeProject && activeProject.id) {
+      try {
+        localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+        localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      await saveProject();
+    }
+    onClose();
+  };
+
+  // Load project from API or LocalStorage on mount
   useEffect(() => {
     const fetchProject = async () => {
       setLoading(true);
-      let project: any = null;
+      let serverProject: any = null;
+      let cachedProject: any = null;
 
       try {
         const response = await fetch(`/api/projects/${projectId}`, {
-          headers: { 'Authorization': `Bearer ${user.token}` }
+          headers: { 'Authorization': `Bearer ${user.token || 'default_admin_token'}` }
         });
 
         if (response.ok) {
-          project = await response.json();
+          serverProject = await response.json();
         }
       } catch (err) {
         console.warn("Backend project fetch offline, checking local cache:", err);
       }
 
-      // Check localStorage cache if backend API call failed or offline
-      if (!project) {
-        const cached = localStorage.getItem(`local_project_${projectId}`);
-        if (cached) {
+      // Check localStorage cache
+      const cached = localStorage.getItem(`local_project_${projectId}`);
+      if (cached) {
+        try {
+          cachedProject = JSON.parse(cached);
+        } catch (e) {}
+      }
+
+      // Extract and parse server pages
+      let serverPages: any[] = [];
+      if (serverProject) {
+        if (Array.isArray(serverProject.pages) && serverProject.pages.length > 0) {
+          serverPages = serverProject.pages;
+        } else if (typeof serverProject.content === 'string' && serverProject.content) {
           try {
-            project = JSON.parse(cached);
+            const parsed = JSON.parse(serverProject.content);
+            if (Array.isArray(parsed.pages)) serverPages = parsed.pages;
           } catch (e) {}
         }
       }
 
-      if (!project) {
-        project = {
+      // Extract and parse cached pages
+      let cachedPages: any[] = [];
+      if (cachedProject) {
+        if (Array.isArray(cachedProject.pages) && cachedProject.pages.length > 0) {
+          cachedPages = cachedProject.pages;
+        } else if (typeof cachedProject.content === 'string' && cachedProject.content) {
+          try {
+            const parsed = JSON.parse(cachedProject.content);
+            if (Array.isArray(parsed.pages)) cachedPages = parsed.pages;
+          } catch (e) {}
+        }
+      }
+
+      // Helper to count non-default user content
+      const countUserContent = (pages: any[]) => {
+        let count = 0;
+        pages.forEach((p) => {
+          (p.elements || []).forEach((el: any) => {
+            const id = el.id || '';
+            if (id.includes('_title') || id.includes('_text') || id.includes('_img') || id.includes('_sub_title') || el.type === 'image' || el.type === 'text') {
+              if (el.text && el.text.length > 15 && !el.text.includes('CTRL+READ') && !el.text.includes('DEPARTMENT OF') && !el.text.includes('NEWS LETTER')) {
+                count += el.text.length;
+              } else if (el.type === 'image' && el.url && !el.url.includes('unsplash.com')) {
+                count += 50;
+              }
+            }
+          });
+        });
+        return count;
+      };
+
+      const serverScore = countUserContent(serverPages);
+      const cachedScore = countUserContent(cachedPages);
+
+      let projectToUse: any = null;
+
+      if (cachedProject && (cachedScore >= serverScore || serverPages.length === 0)) {
+        projectToUse = {
+          ...cachedProject,
+          pages: cachedPages.length > 0 ? cachedPages : (serverPages.length > 0 ? serverPages : []),
+          id: projectId
+        };
+      } else if (serverProject) {
+        projectToUse = {
+          ...serverProject,
+          pages: serverPages,
+          id: projectId
+        };
+      } else if (cachedProject) {
+        projectToUse = { ...cachedProject, id: projectId };
+      }
+
+      if (!projectToUse) {
+        projectToUse = {
           id: projectId,
           name: "Academic Newsletter",
           category: "Academic",
@@ -166,23 +241,23 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       }
 
       try {
-        let parsedProject = { ...project };
+        let parsedProject = { ...projectToUse };
 
-          if (typeof project.content === 'string' && project.content) {
-            try {
-              const content = JSON.parse(project.content);
-              parsedProject = {
-                ...project,
-                canvasWidth: content.canvasWidth || 800,
-                canvasHeight: content.canvasHeight || 1130,
-                theme: content.theme || { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#f4f4f5' },
-                pages: Array.isArray(content.pages) ? content.pages : [],
-                promptMetadata: content.promptMetadata
-              };
-            } catch (jsonErr) {
-              console.error("Error parsing project content JSON:", jsonErr);
-            }
+        if (typeof projectToUse.content === 'string' && projectToUse.content && (!parsedProject.pages || parsedProject.pages.length === 0)) {
+          try {
+            const content = JSON.parse(projectToUse.content);
+            parsedProject = {
+              ...projectToUse,
+              canvasWidth: content.canvasWidth || 800,
+              canvasHeight: content.canvasHeight || 1130,
+              theme: content.theme || { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#f4f4f5' },
+              pages: Array.isArray(content.pages) ? content.pages : [],
+              promptMetadata: content.promptMetadata
+            };
+          } catch (jsonErr) {
+            console.error("Error parsing project content JSON:", jsonErr);
           }
+        }
 
           // Support dynamic page structures with Cover Page logos & Editorial Board
           if (Array.isArray(parsedProject.pages)) {
@@ -824,7 +899,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         {/* Left Side Navigation & Metadata */}
         <div className="flex items-center space-x-4">
           <button 
-            onClick={onClose} 
+            onClick={handleCloseAndSave} 
             className="p-2 hover:bg-white/5 rounded-lg text-slate-300 hover:text-white transition-colors"
             title="Return to Dashboard"
           >

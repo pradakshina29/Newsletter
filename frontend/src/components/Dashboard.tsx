@@ -209,10 +209,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
 
       // Then merge server projects
       (serverProjects || []).forEach((pj: any, idx: number) => {
-        let displayName = pj.name;
-        if (!displayName || displayName === "it" || displayName.includes("CTRL+READ") || displayName.includes("Sports & Clubs") || displayName.startsWith("My ") || displayName === "Academic" || displayName === "New Project") {
-          displayName = idx === 0 ? "Untitled Draft" : `Untitled Draft ${idx + 1}`;
-        }
+        let displayName = pj.name && pj.name.trim() !== '' ? pj.name : (idx === 0 ? "Untitled Draft" : `Untitled Draft ${idx + 1}`);
 
         const localVersion = combinedMap.get(pj.id);
         if (localVersion) {

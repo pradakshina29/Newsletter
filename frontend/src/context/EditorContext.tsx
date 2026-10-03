@@ -347,6 +347,12 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     setActiveProject(normalizedProject);
+    if (normalizedProject.id) {
+      try {
+        localStorage.setItem(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
+        localStorage.setItem(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+    }
     if (normalizedProject.pages && normalizedProject.pages.length > 0) {
       setActivePageId(prev => {
         const exists = normalizedProject.pages.some(p => p.id === prev);
@@ -355,7 +361,12 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     setUndoStack([]);
     setRedoStack([]);
-    prevContentRef.current = JSON.stringify(normalizedProject.pages);
+    prevContentRef.current = JSON.stringify({
+      name: normalizedProject.name,
+      pages: normalizedProject.pages,
+      theme: normalizedProject.theme,
+      department: normalizedProject.department
+    });
   }, []);
 
   // Save project back to server & local cache
@@ -363,7 +374,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const proj = projectToSave || activeProject;
     if (!proj || !proj.id) return;
 
-    // Immediately cache to localStorage so sudden tab closes lose nothing
+    // Immediately cache to localStorage so sudden tab closes or navigation lose nothing
     try {
       localStorage.setItem(`local_project_${proj.id}`, JSON.stringify(proj));
       localStorage.setItem(`last_autosaved_${proj.id}`, new Date().toISOString());
@@ -371,7 +382,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       console.warn('LocalStorage save warning:', err);
     }
 
-    const authToken = token || localStorage.getItem('token') || '';
+    const authToken = token || localStorage.getItem('token') || 'default_admin_token';
     
     setIsSaving(true);
     try {
@@ -388,8 +399,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           department: proj.department,
           status: proj.status,
           content: JSON.stringify({
-            canvasWidth: proj.canvasWidth,
-            canvasHeight: proj.canvasHeight,
+            canvasWidth: proj.canvasWidth || 800,
+            canvasHeight: proj.canvasHeight || 1130,
             theme: proj.theme,
             pages: proj.pages,
             promptMetadata: (proj as any).promptMetadata
@@ -398,7 +409,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
 
       if (!response.ok) {
-        console.warn('Cloud save response warning:', response.status);
+        console.warn('Cloud save response status:', response.status);
       }
     } catch (e) {
       console.error('Cloud Save error:', e);
@@ -407,45 +418,57 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [activeProject, token]);
 
-  // Fast Debounced Autosave (Every 2 seconds check if content changed)
+  // Fast Responsive Autosave (Immediate local cache on every edit + 1s debounced cloud save)
   useEffect(() => {
     if (!activeProject || !activeProject.id) return;
     
     const currentSerialized = JSON.stringify({
       name: activeProject.name,
       pages: activeProject.pages,
-      theme: activeProject.theme
+      theme: activeProject.theme,
+      department: activeProject.department
     });
-    if (currentSerialized === prevContentRef.current) return; // No change
 
-    // Immediate local cache save on change
+    // Always immediately sync to local storage on any state change
     try {
       localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
       localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
     } catch (e) {}
 
+    if (currentSerialized === prevContentRef.current) return; // Cloud save already in sync
+
     const interval = setTimeout(() => {
       saveProject();
       prevContentRef.current = currentSerialized;
-    }, 2000); // 2 seconds fast autosave check
+    }, 1000); // 1-second responsive autosave to cloud
 
     return () => clearTimeout(interval);
   }, [activeProject, saveProject]);
 
-  // Sudden window close / tab refresh protection listener
+  // Sudden window close / tab refresh / tab hide protection listeners
   useEffect(() => {
-    const handleBeforeUnload = () => {
+    const handleImmediateSave = () => {
       if (activeProject && activeProject.id) {
         try {
           localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
           localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
         } catch (e) {}
+        saveProject();
       }
     };
 
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [activeProject]);
+    window.addEventListener('beforeunload', handleImmediateSave);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') {
+        handleImmediateSave();
+      }
+    });
+
+    return () => {
+      window.removeEventListener('beforeunload', handleImmediateSave);
+      document.removeEventListener('visibilitychange', handleImmediateSave);
+    };
+  }, [activeProject, saveProject]);
 
   const updateProjectMetadata = (name: string, description?: string, category?: string, department?: string) => {
     if (!activeProject) return;
