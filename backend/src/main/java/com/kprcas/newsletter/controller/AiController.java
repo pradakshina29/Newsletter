@@ -769,58 +769,78 @@ public class AiController {
             lines.add("The department congratulates all participants on their commendable effort.");
         } else if (cCategory.contains("ACHIEVEMENT") || cCategory.contains("AWARD") || cCategory.contains("PATENT") || cCategory.contains("STUDENT")) {
             lines.add("The Department successfully organized the academic initiative titled \"" + cEvent + "\"" + dateClause + ".");
+            lines.add("The initiative was spearheaded by dedicated student teams representing " + cPart + ", demonstrating exceptional domain acumen and teamwork.");
             if (!cPerson.isEmpty()) {
-                lines.add("The student delegation (" + cPerson + ") actively represented the department.");
+                lines.add("Student delegates (" + cPerson + ") actively showcased practical problem-solving capabilities, rapid prototyping, and software engineering prowess.");
             }
+            lines.add("During the core technical sessions, participants delivered live interactive demonstrations, system architecture walkthroughs, and performance benchmarking.");
             if (!cKey.isEmpty()) {
-                lines.add("Key event highlights included " + cKey + ".");
+                lines.add("Key project highlights and competition focus areas included: " + cKey + ".");
+            } else {
+                lines.add("The challenges focused on real-world application building, code optimization, algorithmic efficiency, and scalable module deployment.");
             }
-            lines.add("The department warmly congratulates the students on their active participation and academic initiative!");
+            lines.add("An esteemed evaluation panel comprising senior faculty and domain observers commended the student delegation for their innovative execution.");
+            lines.add("The program provided an impactful platform for participants to exchange ideas, gain structured technical feedback, and refine software development methodologies.");
+            lines.add("The Management, Principal, and Department warmly congratulate all student achievers and participants on their commendable milestone and stellar dedication!");
         } else if (cCategory.contains("PLACEMENT")) {
             lines.add("The Department proudly celebrates the career success of students in the campus placement drive conducted by " + cEvent + dateClause + ".");
-            lines.add("A total of " + cPart + " candidates successfully cleared rigorous technical, coding, and interview rounds for " + cPerson + " roles with competitive salary packages.");
+            lines.add("The recruitment drive was organized for prestigious technical and software roles offering competitive remuneration packages.");
+            lines.add("Final year students participated with high enthusiasm and professionalism, clearing rigorous multi-tier aptitude, programming, and interview rounds.");
+            lines.add("A total of " + cPart + " candidates successfully cleared rigorous evaluation criteria" + (!cPerson.isEmpty() ? " for " + cPerson + " positions." : "."));
             if (!cKey.isEmpty()) {
-                lines.add("Selection highlights included " + cKey + ".");
+                lines.add("Key placement highlights and recruitment tracks included: " + cKey + ".");
             } else {
-                lines.add("Recruiters praised the candidate cohort for their strong analytical acumen and software skills.");
+                lines.add("Corporate recruiters expressed high praise for the candidate cohort's strong conceptual fundamentals, analytical agility, and industry readiness.");
             }
+            lines.add("The selection process comprehensively tested live coding capabilities, data structure proficiency, problem troubleshooting, and executive communication skills.");
+            lines.add("The department placement cell and faculty mentors provided comprehensive pre-placement training, mock interviews, and continuous career guidance.");
             lines.add("The leadership team and faculty members extend their heartfelt congratulations and best wishes to all placed students as they step into promising corporate careers!");
         } else if (cCategory.contains("WORKSHOP") || cCategory.contains("SEMINAR") || cCategory.contains("SKILL")) {
-            lines.add("The Department organized an enriching technical workshop titled \"" + cEvent + "\"" + dateClause + ".");
+            lines.add("The Department organized an enriching, high-impact technical workshop titled \"" + cEvent + "\"" + dateClause + ".");
             if (!cPerson.isEmpty()) {
                 lines.add("Esteemed resource person " + cPerson + " delivered insightful sessions providing practical, hands-on experience to " + cPart + ".");
             }
+            lines.add("A vibrant cohort of student delegates and faculty members actively participated in the interactive technical sessions and hands-on laboratory modules.");
+            lines.add("The comprehensive syllabus covered core architectural principles, live coding exercises, cloud environments, and industry best practices.");
             if (!cKey.isEmpty()) {
-                lines.add("The comprehensive curriculum focused on " + cKey + ".");
+                lines.add("Key workshop modules and practical topics explored included: " + cKey + ".");
             } else {
-                lines.add("The interactive sessions effectively bridged classroom theory with current industry practices.");
+                lines.add("Participants engaged in real-time project implementation, addressing complex logic scenarios and troubleshooting real-world engineering constraints.");
             }
-            lines.add("Participants gained invaluable domain expertise and practical skills crucial for career excellence.");
-            lines.add("The initiative received widespread appreciation from both students and faculty leadership.");
+            lines.add("The interactive format enabled attendees to bridge theoretical classroom concepts with modern enterprise workflows and production technologies.");
+            lines.add("The workshop concluded with a comprehensive Q&A session, project reviews, and certificate distribution honoring outstanding participant contributions.");
+            lines.add("The initiative received widespread appreciation from both student participants and departmental faculty leadership.");
         } else if (cCategory.contains("RESEARCH") || cCategory.contains("PUBLICATION")) {
             String authorPart = !cPerson.isEmpty() ? cPerson + " from the Department" : "Department Faculty and Student Researchers";
             lines.add("In a major academic milestone, " + authorPart + " authored an impactful research paper titled \"" + cEvent + "\"" + dateClause + ".");
+            lines.add("The published research addresses pressing domain challenges by introducing novel algorithmic frameworks, optimized methodologies, and rigorous experimental validation.");
+            lines.add("The investigation underwent stringent peer review, receiving high accolades from international reviewers for scientific depth and technical merit.");
             if (!cKey.isEmpty()) {
-                lines.add("The research contribution highlights " + cKey + ".");
+                lines.add("Core research contributions and technical focus areas centered on: " + cKey + ".");
             } else {
-                lines.add("The study introduces novel technological frameworks and analytical models.");
+                lines.add("The study introduces novel technological frameworks, analytical models, and scalable benchmark datasets.");
             }
+            lines.add("The findings provide valuable architectural insights that establish strong foundations for emerging academic investigations and industry collaborations.");
             lines.add("This prestigious academic recognition validates the department's research capabilities and commitment to scientific innovation.");
-            lines.add("The Department warmly congratulates the authors on this exemplary research achievement!");
+            lines.add("The Management, Principal, and Department members warmly congratulate the author(s) on this exemplary scholarly achievement!");
         } else {
             lines.add("The Department successfully organized \"" + cEvent + "\"" + dateClause + " with enthusiastic participation from " + cPart + ".");
             if (!cPerson.isEmpty()) {
                 lines.add("Graced by " + cPerson + ", the session inspired attendees through interactive tracks and visionary guidance.");
             }
+            lines.add("The core objective of the initiative was to foster multidisciplinary innovation, practical knowledge transfer, and professional competency among participants.");
+            lines.add("The sessions featured interactive technical discussions, live project demonstrations, and insightful presentations from student and faculty teams.");
             if (!cKey.isEmpty()) {
-                lines.add("Core program highlights centered on " + cKey + ".");
+                lines.add("Key event proceedings and focal highlights included: " + cKey + ".");
             } else {
-                lines.add("The initiative fostered vibrant teamwork, technical excellence, and active student engagement.");
+                lines.add("Participants actively engaged in collaborative problem-solving, exploring emerging trends and gaining actionable domain perspectives.");
             }
-            lines.add("The department congratulates the organizers and participants for conducting a highly successful event!");
+            lines.add("The initiative witnessed vibrant peer engagement, structured feedback rounds, and insightful deliberations throughout the day.");
+            lines.add("Attendees expressed immense satisfaction with the quality of discussions, technical organization, and practical insights gained during the event.");
+            lines.add("The department congratulates all faculty coordinators, student organizers, and participants for conducting a highly successful event!");
         }
 
-        String articleText = cleanValue(String.join(" ", lines));
+        String articleText = cleanValue(String.join("\n\n", lines));
 
         Map<String, String> response = new HashMap<>();
         response.put("article", articleText);

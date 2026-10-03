@@ -211,42 +211,38 @@ function extractTextFromBinaryDoc(arrayBuffer: ArrayBuffer): string {
 }
 
 /**
- * Deduplicates sentences and strips repeated boilerplate phrases.
+ * Deduplicates sentences and strips repeated boilerplate phrases while preserving all substantive sentences and paragraphs.
  */
 export function deduplicateSentences(text: string): string {
   if (!text) return '';
 
-  const cleaned = cleanAndSanitizeReportText(text);
-  const rawSentences = cleaned.split(/(?<=[.!?])\s+/);
-  const uniqueSentences: string[] = [];
+  const paragraphs = text.split(/\n\s*\n/);
+  const resultParagraphs: string[] = [];
   const seenNorm = new Set<string>();
 
-  for (const s of rawSentences) {
-    const trimmed = s.trim();
-    if (trimmed.length < 5) continue;
+  for (const para of paragraphs) {
+    const rawSentences = para.split(/(?<=[.!?])\s+/);
+    const uniqueSentences: string[] = [];
 
-    const normKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (normKey.length < 4) continue;
+    for (const s of rawSentences) {
+      const trimmed = s.trim();
+      if (trimmed.length < 5) continue;
 
-    let isDuplicate = false;
-    for (const existing of seenNorm) {
-      if (
-        existing === normKey ||
-        (normKey.length > 25 && existing.includes(normKey)) ||
-        (existing.length > 25 && normKey.includes(existing))
-      ) {
-        isDuplicate = true;
-        break;
+      const normKey = trimmed.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (normKey.length < 5) continue;
+
+      if (!seenNorm.has(normKey)) {
+        seenNorm.add(normKey);
+        uniqueSentences.push(trimmed);
       }
     }
 
-    if (!isDuplicate) {
-      seenNorm.add(normKey);
-      uniqueSentences.push(trimmed);
+    if (uniqueSentences.length > 0) {
+      resultParagraphs.push(uniqueSentences.join(' '));
     }
   }
 
-  return uniqueSentences.join(' ');
+  return resultParagraphs.join('\n\n');
 }
 
 /**

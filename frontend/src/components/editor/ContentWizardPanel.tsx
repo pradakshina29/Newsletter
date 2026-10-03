@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { useNotification } from '../../context/NotificationContext';
-import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText } from 'lucide-react';
+import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText, Calendar } from 'lucide-react';
 import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData, isBinaryOrXmlJunk, cleanAndSanitizeReportText } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
 
@@ -1102,52 +1102,78 @@ const ContentWizardPanel: React.FC = () => {
           const cleanP = personVal ? detectAndFixCase(personVal, 'title') : 'Student and Faculty Participants';
           const cleanD = detailsVal ? detectAndFixCase(detailsVal, 'sentence') : 'enriching presentations, interactive discussions, and technical showcases';
           const cleanDept = `Department of ${deptName}`;
+          const cleanTeam = teamVal ? detectAndFixCase(teamVal, 'title') : 'Innovation Team';
 
           if (cat === 'student') {
             const sentences = [
-              `The ${cleanDept} organized the academic initiative titled "${cleanT}" hosted at KPRCAS campus.`,
-              teamVal ? `The project was engineered by Team "${detectAndFixCase(teamVal, 'title')}"${classVal ? ` from ${classVal}` : ''}.` : '',
-              `The student delegation (${cleanP}) displayed exemplary technical capability, innovative thinking, and high enthusiasm.`,
-              `During the event sessions, participants delivered interactive demonstrations highlighting core system features and practical workflows.`,
-              cleanD ? `Key project highlights included ${cleanD}.` : `The team presented hands-on solutions addressing practical real-world problems.`,
-              `The executive leadership and faculty members expressed high appreciation for the students' problem-solving mindset and teamwork.`,
-              `The department warmly congratulates the students on their active participation and academic initiative!`
+              `The ${cleanDept} proudly organized the distinguished academic initiative titled "${cleanT}" hosted at the KPRCAS campus.`,
+              `The initiative was spearheaded by Team "${cleanTeam}"${classVal ? ` representing ${classVal}` : ''}, demonstrating outstanding technical acumen and disciplined collaboration.`,
+              `Student delegates (${cleanP}) actively showcased practical problem-solving capabilities, rapid prototyping, and software engineering prowess.`,
+              `During the core technical sessions, participants delivered live interactive demonstrations, system architecture walkthroughs, and performance benchmarking.`,
+              cleanD ? `Key project highlights and competition focus areas included: ${cleanD}.` : `The challenges focused on real-world application building, code optimization, algorithmic efficiency, and scalable module deployment.`,
+              `An esteemed evaluation panel comprising senior faculty and domain observers commended the student delegation for their innovative execution and clear presentation.`,
+              `The program provided an impactful platform for participants to exchange ideas, gain structured technical feedback, and refine software development methodologies.`,
+              `The Management, Principal, and Department warmly congratulate all student achievers and participants on their commendable milestone and stellar dedication!`
             ].filter(Boolean);
             generatedText = deduplicateSentences(sentences.join(' '));
           } else if (cat === 'faculty') {
             const sentences = [
-              `The ${cleanDept} takes great pride in announcing the milestone research publication titled "${cleanT}".`,
-              `Authored by esteemed faculty member(s) ${cleanP}, the work represents rigorous academic inquiry and technical innovation.`,
-              cleanD ? `The research presents high-impact insights into ${cleanD}.` : `The findings address critical domain challenges with novel methodological solutions.`,
-              `The publication underwent peer review, receiving high commendations for methodological rigor and academic excellence.`,
-              `The Management, Principal, and Department members warmly congratulate the author(s) on this scholarly milestone!`
+              `The ${cleanDept} takes immense pride in celebrating the landmark research achievement titled "${cleanT}".`,
+              `Authored by distinguished faculty researcher(s) ${cleanP}, the scholarly paper was published in a reputed peer-reviewed journal.`,
+              `The published research addresses pressing domain challenges by introducing novel algorithmic frameworks, optimized methodologies, and rigorous experimental validation.`,
+              `The investigation underwent stringent peer review, receiving high accolades from international reviewers for scientific depth and technical merit.`,
+              cleanD ? `Core research contributions and technical focus areas centered on: ${cleanD}.` : `The findings provide valuable architectural insights that establish strong foundations for emerging academic investigations and industry collaborations.`,
+              `This milestone underscores the department's unwavering commitment to cultivating cutting-edge research excellence and intellectual advancement.`,
+              `The breakthrough work will actively enrich ongoing postgraduate research initiatives and specialized laboratory projects across the campus.`,
+              `The Management, Principal, and Department members warmly congratulate ${cleanP} for bringing immense honor and academic distinction to KPRCAS!`
             ].filter(Boolean);
             generatedText = deduplicateSentences(sentences.join(' '));
           } else if (cat === 'placement') {
             const sentences = [
-              `The ${cleanDept} successfully conducted a targeted campus placement drive in partnership with ${cleanT}.`,
-              `The recruitment drive was organized for technical and software roles${dateVal ? ` offering competitive salary packages of ${dateVal}` : ''}.`,
-              `Final year students participated with high enthusiasm, clearing rigorous aptitude, coding, and interview rounds.`,
-              cleanD ? `Selection highlights included: ${cleanD}.` : `Corporate recruiters commended KPRCAS candidates for their industry readiness and analytical capability.`,
-              `The department extends its heartiest congratulations to all placed students and wishes them stellar career success!`
+              `The ${cleanDept} successfully conducted a premier campus recruitment drive in partnership with ${cleanT}.`,
+              `The recruitment initiative was organized for prestigious software development and technical roles${dateVal ? ` offering competitive salary packages of ${dateVal}` : ''}.`,
+              `Final year students participated with high enthusiasm and professionalism, clearing rigorous multi-tier aptitude, programming, and technical interview rounds.`,
+              `Corporate recruiters expressed high appreciation for the candidates' strong conceptual fundamentals, analytical agility, and industry readiness.`,
+              `The selection process comprehensively tested live coding capabilities, data structure proficiency, problem troubleshooting, and executive communication skills.`,
+              cleanD ? `Key placement highlights and recruitment tracks included: ${cleanD}.` : `Multiple eligible candidates successfully cleared all evaluation criteria to secure coveted appointment orders with leading industry recruiters.`,
+              `The department placement cell and faculty mentors provided comprehensive pre-placement training, mock interviews, and continuous career guidance.`,
+              `The Management, Principal, and Faculty members extend their heartiest congratulations and best wishes to all placed students for stellar corporate careers!`
             ].filter(Boolean);
             generatedText = deduplicateSentences(sentences.join(' '));
           } else if (cat === 'workshop') {
             const sentences = [
-              `The ${cleanDept} organized an intensive technical workshop titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
-              `The sessions were led by distinguished resource speaker ${cleanP}, who shared valuable real-world perspectives and technical methodologies.`,
-              `Participants actively engaged in hands-on practical exercises, live architecture setups, and interactive problem-solving modules.`,
-              cleanD ? `Key topics explored during the workshop included: ${cleanD}.` : `The curriculum effectively bridged classroom theoretical concepts with current industry best practices.`,
-              `The workshop concluded with interactive Q&A and high appreciation from all attendees.`
+              `The ${cleanDept} organized an intensive, high-impact technical workshop titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
+              `The program featured eminent resource expert ${cleanP}, who shared extensive practical knowledge, industry standards, and advanced engineering techniques.`,
+              `A vibrant cohort of student delegates and faculty members actively participated in the interactive technical sessions and hands-on laboratory modules.`,
+              `The comprehensive syllabus covered core architectural principles, live coding exercises, cloud environments, and industry best practices.`,
+              cleanD ? `Key workshop modules and practical topics explored included: ${cleanD}.` : `Participants engaged in real-time project implementation, addressing complex logic scenarios and troubleshooting real-world engineering constraints.`,
+              `The interactive format enabled attendees to bridge theoretical classroom concepts with modern enterprise workflows and production technologies.`,
+              `The workshop concluded with a comprehensive Q&A session, project reviews, and certificate distribution honoring outstanding participant contributions.`,
+              `The department extends sincere appreciation to the resource persons, faculty convenors, and student attendees for making the workshop a grand success!`
+            ].filter(Boolean);
+            generatedText = deduplicateSentences(sentences.join(' '));
+          } else if (cat === 'welcome') {
+            const sentences = [
+              `The ${cleanDept} organized a memorable, grand orientation program titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
+              `The auspicious occasion was graced by esteemed Chief Guest ${cleanP}, who delivered an inspiring inaugural address to welcome the newly inducted batch.`,
+              `The program provided students and parents with a comprehensive walkthrough of the academic curriculum, modern laboratory infrastructure, and departmental ethos.`,
+              `In their keynote address, the dignitaries encouraged students to strive for academic curiosity, technical mastery, and holistic personal growth.`,
+              cleanD ? `Event highlights and orientation sessions included: ${cleanD}.` : `Senior student coordinators facilitated interactive ice-breaking sessions, campus tours, and technical club introductions.`,
+              `Interactive discussions and Q&A sessions eased the freshmen's transition into collegiate academic life, building high enthusiasm for the year ahead.`,
+              `The department faculty members reiterated their commitment to providing continuous mentorship, career guidance, and experiential learning opportunities.`,
+              `The Management, Principal, and Department warmly welcome the incoming cohort and wish them an enriching, transformative academic journey at KPRCAS!`
             ].filter(Boolean);
             generatedText = deduplicateSentences(sentences.join(' '));
           } else {
             const sentences = [
-              `The ${cleanDept} successfully conducted the academic program titled "${cleanT}".`,
-              `The event was graced and coordinated by ${cleanP}, bringing together participants for an enriching learning session.`,
-              `The program focused on fostering academic collaboration, practical knowledge transfer, and domain skill development.`,
-              cleanD ? `Key event highlights included: ${cleanD}.` : `Participants actively engaged in interactive discussions and project demonstrations.`,
-              `The department congratulates all organizers and participants for making the event a grand academic success!`
+              `The ${cleanDept} successfully conducted the flagship academic program titled "${cleanT}" hosted at KPRCAS campus.`,
+              `Organized under the esteemed leadership and coordination of ${cleanP}, the event brought together delegates for an enriching academic experience.`,
+              `The core objective of the initiative was to foster multidisciplinary innovation, practical knowledge transfer, and professional competency among participants.`,
+              `The sessions featured interactive technical discussions, live project demonstrations, and insightful presentations from student and faculty teams.`,
+              cleanD ? `Key event proceedings and focal highlights included: ${cleanD}.` : `Participants actively engaged in collaborative problem-solving, exploring emerging trends and gaining actionable domain perspectives.`,
+              `The initiative witnessed vibrant peer engagement, structured feedback rounds, and insightful deliberations throughout the day.`,
+              `Attendees expressed immense satisfaction with the quality of discussions, technical organization, and practical insights gained during the event.`,
+              `The department warmly congratulates all faculty coordinators, student organizers, and participants for making this academic program a resounding success!`
             ].filter(Boolean);
             generatedText = deduplicateSentences(sentences.join(' '));
           }
@@ -2436,6 +2462,47 @@ const ContentWizardPanel: React.FC = () => {
         <div className="flex-grow overflow-y-auto max-h-full p-5 space-y-5 text-left bg-white dark:bg-slate-900">
           
           {/* Page Pagination Selector */}
+          {/* Header Issue Month & Year Editor (Applied across all pages) */}
+          <div className="p-3.5 bg-gradient-to-r from-blue-500/10 via-indigo-500/10 to-purple-500/10 border border-blue-500/30 rounded-2xl space-y-2 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-1.5 text-xs font-extrabold text-blue-600 dark:text-blue-400">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Newsletter Header Month / Date</span>
+              </div>
+              <span className="text-[9px] font-bold px-2 py-0.5 bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 rounded-full uppercase tracking-wider">
+                All Pages
+              </span>
+            </div>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                value={getElementText('p1_date_hdr') || getElementText(`p${activePageNum}_date_hdr`) || 'OCTOBER 2026'}
+                onChange={(e) => handleUpdateDateGlobally(e.target.value)}
+                placeholder="e.g. OCTOBER 2026 / 2026-2027"
+                className="flex-1 bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-blue-500/40"
+              />
+              <button
+                onClick={() => handleUpdateDateGlobally(getElementText('p1_date_hdr') || getElementText(`p${activePageNum}_date_hdr`) || 'OCTOBER 2026')}
+                className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-[10px] rounded-xl transition-all uppercase shadow-xs whitespace-nowrap"
+                title="Sync this month header to all pages"
+              >
+                Apply All
+              </button>
+            </div>
+            {/* Quick Month Chips */}
+            <div className="flex flex-wrap gap-1 pt-0.5">
+              {['OCTOBER 2026', 'NOVEMBER 2026', 'DECEMBER 2026', 'JANUARY 2027', '2026-2027'].map((m) => (
+                <button
+                  key={m}
+                  onClick={() => handleUpdateDateGlobally(m)}
+                  className="px-2 py-0.5 bg-white/80 dark:bg-slate-800 text-[9px] font-semibold text-slate-700 dark:text-slate-300 hover:bg-blue-500 hover:text-white dark:hover:bg-blue-600 rounded-md border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
+                >
+                  {m}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="space-y-1.5 pb-3 border-b border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between mb-1">
               <label className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider block">

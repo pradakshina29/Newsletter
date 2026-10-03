@@ -62,9 +62,12 @@ export const useEditor = () => {
 };
 
 // Canonical Page Structure Normalizer (ensures complete CTRL+READ header and non-overlapping content stack)
-export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName: string = "Information Technology"): Page => {
+export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName: string = "Information Technology", defaultDate?: string): Page => {
   const deptUpper = (deptName || "Information Technology").toUpperCase();
   const elements = page.elements || [];
+
+  const existingDate = (elements.find((el: any) => el.id && (el.id.includes('date_hdr') || el.id.includes('hdr_date')) && (el as any).text) as any)?.text || defaultDate || "OCTOBER 2026";
+  const existingDept = (elements.find((el: any) => el.id && (el.id.includes('dept_hdr') || el.id.includes('hdr_dept')) && (el as any).text) as any)?.text || `DEPARTMENT OF ${deptUpper}`;
 
   const isCoverPage = pNum === 1 && elements.some((el: any) => el.id && (el.id.includes('cover_img') || el.id.includes('kprcas_logo')));
   const isEditorialPage = elements.some((el: any) => el.id && (el.id.includes('ribbon_text') || el.id.includes('badge_chief')));
@@ -72,8 +75,8 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const canonicalHeader: CanvasElement[] = [
     { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 0 },
     { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
-    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "left", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
-    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "right", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
+    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: existingDept, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "left", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: false, zIndex: 50 },
+    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: existingDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "right", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: false, zIndex: 50 },
     { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
     { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 1.5, lineHeight: 1.0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
     { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
@@ -804,6 +807,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Clean previous last page if it had Editorial Board elements
+    const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
+
     const updatedOldPages = oldPages.map((p, idx) => {
       const pNum = idx + 1;
       const hasRibbon = p.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
@@ -815,7 +820,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
             { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
             { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
             { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
             { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
             { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
@@ -837,7 +842,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         { id: `p${newPageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
         { id: `p${newPageNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
         { id: `p${newPageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-        { id: `p${newPageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+        { id: `p${newPageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
         { id: `p${newPageNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
         { id: `p${newPageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
         { id: `p${newPageNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
@@ -950,6 +955,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
+    const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
+
     const updatedPages = oldPages.map((page, idx) => {
       const pNum = idx + 1;
       const isLast = idx === lastIdx;
@@ -962,7 +969,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
             { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
             { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
             { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
             { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
             { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
