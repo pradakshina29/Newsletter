@@ -564,7 +564,9 @@ const CanvasWorkspace: React.FC<{
               id={el.id}
               src={el.url}
               alt="Workspace visual"
-              className="w-full h-full"
+              draggable={false}
+              onDragStart={(e) => e.preventDefault()}
+              className="w-full h-full pointer-events-none select-none"
               style={{
                 objectFit: (el as any).objectFit || (el.id.includes('logo') ? 'contain' : 'cover'),
                 borderRadius: `${el.borderRadius || 0}px`,

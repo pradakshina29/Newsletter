@@ -842,9 +842,9 @@ export function parseReportEntities(
 
   // 9. Venue & Attendance (ONLY IF FOUND IN CURRENT DOCUMENT)
   let venue = "";
-  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\\n\\r,]+)/i);
+  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\n\r,]+)/i);
   if (venueMatch && venueMatch[1] && !isBinaryOrXmlJunk(venueMatch[1])) {
-    const vCandidate = venueMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
+    const vCandidate = decodeXmlEntities(venueMatch[1].trim()).replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time") && !vCandidate.toLowerCase().startsWith("page")) {
       venue = vCandidate;
     }

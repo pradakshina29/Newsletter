@@ -74,24 +74,27 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
   const canonicalHeader: CanvasElement[] = [
     { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 0 },
+    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 10 },
     { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: existingDept, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "left", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: false, zIndex: 50 },
     { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: existingDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "right", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: false, zIndex: 50 },
+    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 10 },
     { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 1.5, lineHeight: 1.0, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
+    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 10 },
     { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 2.5, lineHeight: 1.4, opacity: 100, rotation: 0, locked: true, zIndex: 50 },
+    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true, zIndex: 10 },
   ];
 
   const canonicalFooter: CanvasElement[] = [
     { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${deptName}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, italic: false, underline: false, align: "center", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 }
   ];
 
-  // Strip broken/legacy header elements and intrusive line shapes
+  // Strip broken/legacy header elements (keep non-header content elements)
   const nonHeaderElements = elements.filter((el: any) => {
     const id = (el.id || '').toLowerCase();
     return !(
       id === `p${pNum}_bg` || id.endsWith('_bg') ||
-      id.includes('line_hdr') || id.includes('dept_hdr') || id.includes('date_hdr') ||
-      id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text') ||
-      id.includes('hdr_') || id.includes('_hdr') || id.includes('line_div') || id.includes('diamond_div')
+      id.includes('dept_hdr') || id.includes('date_hdr') ||
+      id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text')
     );
   });
 
@@ -113,14 +116,14 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const titleEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_title') || el.id.includes('title_')) && !el.id.includes('sub'));
   const subEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_sub') || el.id.includes('sub_')));
   const hostEl = nonHeaderElements.find((el: any) => el.type === 'text' && el.id.includes('_host'));
+  const categoryTagEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('category') || el.id.includes('tag') || el.id.includes('badge') || el.id.includes('section')));
   const bodyEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_text') || el.id.includes('_body') || el.id.includes('_content') || el.id.includes('_paragraph') || el.id.includes('_desc')));
   const photoEls = nonHeaderElements.filter((el: any) => el.type === 'image' && !el.id.includes('logo') && !el.id.includes('pic_'));
   
   // Exclude duplicate/redundant title/sub/body text elements from otherEls to prevent duplication
   const otherEls = nonHeaderElements.filter((el: any) => {
-    if (el === titleEl || el === subEl || el === hostEl || el === bodyEl || photoEls.includes(el)) return false;
+    if (el === titleEl || el === subEl || el === hostEl || el === categoryTagEl || el === bodyEl || photoEls.includes(el)) return false;
     const lowerId = (el.id || '').toLowerCase();
-    // Filter out old/duplicate titles, sub titles, and body texts from previous report uploads
     if (titleEl && (lowerId.includes('_title') || lowerId.includes('title_')) && !lowerId.includes('sub')) return false;
     if (subEl && (lowerId.includes('_sub') || lowerId.includes('sub_'))) return false;
     if (bodyEl && (lowerId.includes('_text') || lowerId.includes('_body') || lowerId.includes('_content') || lowerId.includes('_paragraph') || lowerId.includes('_desc'))) return false;
@@ -176,7 +179,7 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       lineHeight: (subEl as any).lineHeight || 1.35,
       letterSpacing: (subEl as any).letterSpacing !== undefined ? (subEl as any).letterSpacing : 0
     } as any);
-    currentY += ((subEl as any).height || subHeight) + 4;
+    currentY += ((subEl as any).height || subHeight) + 6;
   }
 
   if (hostEl) {
@@ -201,6 +204,22 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     currentY += 22;
   }
 
+  if (categoryTagEl) {
+    realignedContent.push({
+      ...categoryTagEl,
+      x: (categoryTagEl as any).x !== undefined ? (categoryTagEl as any).x : 50,
+      y: currentY,
+      width: (categoryTagEl as any).width || 700,
+      height: (categoryTagEl as any).height || 22,
+      fontSize: (categoryTagEl as any).fontSize || 12,
+      align: (categoryTagEl as any).align || 'center',
+      bold: true,
+      color: (categoryTagEl as any).color || '#0F172A',
+      fontFamily: (categoryTagEl as any).fontFamily || 'Poppins'
+    } as any);
+    currentY += 26;
+  }
+
   // Subtle separator line
   realignedContent.push({
     id: `p${pNum}_meta_line`,
@@ -216,7 +235,7 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     opacity: 80,
     rotation: 0
   });
-  currentY += 10;
+  currentY += 12;
 
   if (bodyEl) {
     const hasPhotos = photoEls.length > 0;
