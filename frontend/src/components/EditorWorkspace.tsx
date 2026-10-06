@@ -269,14 +269,15 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
               const isLastPage = pageNum === parsedProject.pages.length;
               let elements = p.elements || [];
 
-              // Clean duplicate headers & unsplash placeholders
+              // Clean duplicate headers, intrusive divider lines, & unsplash placeholders
               elements = elements.filter((el: any) => {
                 if (el.type === 'image' && el.url && el.url.includes("unsplash.com")) return false;
                 const id = (el.id || '').toLowerCase();
 
                 if (id === `p${pageNum}_bg` || id.endsWith('_bg') ||
                     id.includes('line_hdr') || id.includes('dept_hdr') || id.includes('date_hdr') ||
-                    id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('newsletter_title')) {
+                    id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('newsletter_title') ||
+                    id.includes('line_div') || id.includes('diamond_div')) {
                   return false;
                 }
 
@@ -298,14 +299,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
               // Prepend clean header
               const cleanHeader = [
                 { id: `p${pageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
                 { id: `p${pageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "left", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true },
                 { id: `p${pageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "right", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
                 { id: `p${pageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 1.5, lineHeight: 1.0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 2.5, lineHeight: 1.4, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true }
+                { id: `p${pageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 2.5, lineHeight: 1.4, opacity: 100, rotation: 0, locked: true }
               ];
 
               // Page 1 Cover Page additions
@@ -343,10 +340,6 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                     { id: `p${pageNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: "MR. AKHIL K M", fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
                     { id: `p${pageNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: "ASSISTANT PROFESSOR", fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
                     { id: `p${pageNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pageNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-                    { id: `p${pageNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pageNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pageNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
                     { id: `p${pageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pageNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
                   );
                 }
@@ -476,14 +469,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                 if (!hasRibbon) {
                   page.elements = [
                     { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
                     { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
 
                     { id: `p${pNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
                     { id: `p${pNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
@@ -502,11 +491,6 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                     { id: `p${pNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
                     { id: `p${pNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
 
-                    { id: `p${pNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-                    { id: `p${pNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
-
                     { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
                   ];
                 }
@@ -516,14 +500,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                   page.title = `Page ${pNum}`;
                   page.elements = [
                     { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
                     { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
                   ];
                 }
@@ -692,17 +672,18 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           <div style="position: relative; width: 800px; height: 1130px; background-color: #EFEFEF; overflow: hidden; font-family: 'Poppins', sans-serif;">
             ${(page.elements || []).map((el: any) => {
               if (el.type === 'shape') {
+                if (el.id?.includes('line_div') || el.id?.includes('diamond_div')) return '';
                 return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background-color: ${el.fillColor || '#000000'}; border-radius: ${el.borderRadius || 0}px; opacity: ${(el.opacity ?? 100) / 100}; transform: rotate(${el.rotation || 0}deg);"></div>`;
               }
               if (el.type === 'text') {
                 const fontStack = getFontStack(el.fontFamily);
                 const isTitle = el.id?.includes('title_hdr');
                 const flexStyle = isTitle ? "display: flex; align-items: center; justify-content: center; line-height: 1.0;" : `line-height: ${el.lineHeight || 1.4};`;
-                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; font-size: ${el.fontSize}px; font-family: ${fontStack}; color: ${el.color || '#000000'}; font-weight: ${el.bold ? 'bold' : 'normal'}; font-style: ${el.italic ? 'italic' : 'normal'}; text-decoration: ${el.underline ? 'underline' : 'none'}; text-align: ${el.align || 'left'}; ${flexStyle} letter-spacing: ${el.letterSpacing || 0}px; white-space: pre-wrap; word-break: break-word;">${(el.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
+                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; min-height: ${el.height}px; height: auto; font-size: ${el.fontSize}px; font-family: ${fontStack}; color: ${el.color || '#000000'}; font-weight: ${el.bold ? 'bold' : 'normal'}; font-style: ${el.italic ? 'italic' : 'normal'}; text-decoration: ${el.underline ? 'underline' : 'none'}; text-align: ${el.align || 'left'}; ${flexStyle} letter-spacing: ${el.letterSpacing || 0}px; white-space: pre-wrap; word-break: break-word; overflow: visible;">${(el.text || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>`;
               }
               if (el.type === 'image' && el.url) {
                 const fit = el.objectFit || (el.id?.includes('logo') ? 'contain' : 'cover');
-                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; display: flex; align-items: center; justify-content: center; overflow: hidden;"><img src="${el.url}" style="max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: ${fit}; display: block; border-radius: ${el.borderRadius || 0}px;" /></div>`;
+                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; overflow: hidden; border-radius: ${el.borderRadius || 0}px; box-shadow: ${el.shadow === 'sm' ? '0 1px 2px rgba(0,0,0,0.05)' : el.shadow === 'md' ? '0 4px 6px rgba(0,0,0,0.1)' : el.shadow === 'lg' ? '0 10px 15px rgba(0,0,0,0.1)' : 'none'};"><img src="${el.url}" style="width: 100%; height: 100%; object-fit: ${fit}; display: block; border-radius: ${el.borderRadius || 0}px;" /></div>`;
               }
               return '';
             }).join('')}
@@ -710,7 +691,13 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         `;
 
         await document.fonts.ready;
-        await new Promise(r => setTimeout(r, 250));
+        // Wait for images inside exportContainer to load fully
+        const imgs = Array.from(exportContainer.querySelectorAll('img'));
+        await Promise.all(imgs.map(img => new Promise(resolve => {
+          if (img.complete) resolve(true);
+          else { img.onload = () => resolve(true); img.onerror = () => resolve(true); }
+        })));
+        await new Promise(r => setTimeout(r, 200));
 
         const canvasObj = await html2canvas(exportContainer, {
           scale: 2,
@@ -758,14 +745,15 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         new Paragraph({
           children: [
             new TextRun({
-              text: `${(activeProject.department || "Information Technology").toUpperCase()} - NEWSLETTER`,
+              text: `${(activeProject.department || "Information Technology").toUpperCase()} - OFFICIAL NEWSLETTER`,
               bold: true,
-              size: 24,
-              font: "Arial"
+              size: 28,
+              font: "Arial",
+              color: "1E40AF"
             })
           ],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 150 }
+          spacing: { after: 200 }
         })
       );
 
@@ -777,10 +765,11 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           new Paragraph({
             children: [
               new TextRun({
-                text: `=== PAGE ${pageNum} ===`,
+                text: `--- PAGE ${pageNum} ---`,
                 bold: true,
-                size: 24,
-                font: "Arial"
+                size: 20,
+                font: "Arial",
+                color: "64748B"
               })
             ],
             alignment: AlignmentType.CENTER,
@@ -792,10 +781,11 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
         for (const el of sortedElements) {
           if (el.type === 'text') {
-            if (el.id.includes('line_') || el.id.includes('div_')) continue;
+            if (el.id?.includes('line_') || el.id?.includes('div_')) continue;
 
-            const isTitle = el.id.includes('title') || el.id.includes('heading') || el.id.includes('hdr');
-            const fontSize = el.fontSize ? Math.round(el.fontSize * 1.8) : 22;
+            const isTitle = el.id?.includes('title') || el.id?.includes('heading') || el.id?.includes('hdr');
+            const fontHalfPoints = el.fontSize ? Math.round(el.fontSize * 2) : 22;
+            const hexColor = el.color ? el.color.replace('#', '') : '000000';
 
             docChildren.push(
               new Paragraph({
@@ -804,12 +794,13 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                     text: el.text || "",
                     bold: el.bold || isTitle,
                     italics: el.italic || false,
-                    size: fontSize,
-                    font: el.fontFamily || "Calibri"
+                    size: fontHalfPoints,
+                    font: el.fontFamily || "Calibri",
+                    color: hexColor
                   })
                 ],
                 alignment: el.align === 'center' ? AlignmentType.CENTER : el.align === 'right' ? AlignmentType.RIGHT : AlignmentType.LEFT,
-                spacing: { before: isTitle ? 140 : 60, after: 60 }
+                spacing: { before: isTitle ? 140 : 80, after: 80 }
               })
             );
           } else if (el.type === 'image' && el.url) {
@@ -831,20 +822,23 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
               }
 
               if (imageData) {
+                const targetW = Math.min(el.width || 400, 520);
+                const targetH = Math.min(el.height || 260, 600);
+
                 docChildren.push(
                   new Paragraph({
                     children: [
                       new ImageRun({
                         data: imageData,
                         transformation: {
-                          width: Math.min(el.width || 350, 480),
-                          height: Math.min(el.height || 220, 350)
+                          width: targetW,
+                          height: targetH
                         },
                         type: 'png' as any
                       })
                     ],
                     alignment: AlignmentType.CENTER,
-                    spacing: { before: 100, after: 100 }
+                    spacing: { before: 120, after: 120 }
                   })
                 );
               }
@@ -876,7 +870,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${activeProject.name.replace(/ /g, '_')}_document.docx`;
+      a.download = `${activeProject.name.replace(/ /g, '_')}_KPRCAS.docx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

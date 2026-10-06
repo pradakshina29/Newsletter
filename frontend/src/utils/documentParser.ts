@@ -564,20 +564,28 @@ export function parseReportEntities(
   const sanitizedText = cleanAndSanitizeReportText(rawText || cleanFileName);
   const lower = sanitizedText.toLowerCase();
 
-  // 1. Intelligent Category Detection
+  // 1. Intelligent Category Tag Detection (matching standard department newsletter sections)
+  let categoryTag = "DEPARTMENT EVENTS";
   let category = "workshop";
-  if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("campus drive") || lower.includes("offer letter") || lower.includes("placed")) {
-    category = "placement";
-  } else if (lower.includes("symposium") || lower.includes("hackathon") || lower.includes("techraga") || lower.includes("culturals") || lower.includes("first place") || lower.includes("second place") || lower.includes("1st prize") || lower.includes("2nd prize") || lower.includes("trophy") || lower.includes("cash award") || lower.includes("competition winner") || lower.includes("achiever") || lower.includes("won the") || lower.includes("events conducted")) {
+
+  if (lower.includes("patent") || lower.includes("certification") || lower.includes("nasscom") || lower.includes("hp life") || lower.includes("prize") || lower.includes("winner") || lower.includes("1st place") || lower.includes("2nd prize") || lower.includes("award") || lower.includes("trophy") || lower.includes("shines at") || lower.includes("bagged") || lower.includes("won")) {
+    categoryTag = "STUDENT’S ACHIEVEMENTS";
     category = "student";
-  } else if (lower.includes("faculty") || lower.includes("research paper") || lower.includes("journal publication") || lower.includes("scopus") || lower.includes("ieee") || lower.includes("springer") || lower.includes("patent") || lower.includes("impact factor") || lower.includes("author")) {
+  } else if (lower.includes("faculty") || lower.includes("research paper") || lower.includes("journal") || lower.includes("publication") || lower.includes("scopus") || lower.includes("ieee") || lower.includes("ijcrt") || lower.includes("authored a research") || lower.includes("co-authored")) {
+    categoryTag = "FACULTY ACHIEVEMENT";
     category = "faculty";
-  } else if (lower.includes("workshop") || lower.includes("seminar") || lower.includes("hands-on") || lower.includes("guest lecture") || lower.includes("resource person") || lower.includes("campus to career") || lower.includes("fdp") || lower.includes("training program") || lower.includes("webinar") || lower.includes("keynote")) {
-    category = "workshop";
-  } else if (lower.includes("welcome") || lower.includes("orientation") || lower.includes("induction") || lower.includes("fresher") || lower.includes("farewell") || lower.includes("inauguration of association")) {
-    category = "welcome";
-  } else {
+  } else if (lower.includes("swachh") || lower.includes("nss") || lower.includes("cleanliness drive") || lower.includes("extension activity") || lower.includes("village") || lower.includes("social service") || lower.includes("school in")) {
+    categoryTag = "EXTENSION ACTIVITY";
     category = "custom";
+  } else if (lower.includes("participation") || lower.includes("participated") || lower.includes("visited") || lower.includes("visit") || lower.includes("book fair") || lower.includes("symposium") || lower.includes("fashion show") || lower.includes("outreach")) {
+    categoryTag = "STUDENT PARTICIPATION";
+    category = "student";
+  } else if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("campus drive") || lower.includes("offer letter") || lower.includes("placed")) {
+    categoryTag = "STUDENT’S ACHIEVEMENTS";
+    category = "placement";
+  } else {
+    categoryTag = "DEPARTMENT EVENTS";
+    category = "workshop";
   }
 
   // 2. Event Title Extraction (with concise title extractor & colon/symbol stripping)
@@ -592,7 +600,10 @@ export function parseReportEntities(
     /Seminar on\s+([^\n\r]+)/i,
     /Orientation Program on\s+([^\n\r]+)/i,
     /(?:Two|One)[- ]Day\s+(?:National|International|Hands[- ]on)?\s*(?:Workshop|Seminar|Conference|Symposium|FDP)\s+on\s+([^\n\r]+)/i,
-    /Placement Drive by\s+([^\n\r]+)/i
+    /Placement Drive by\s+([^\n\r]+)/i,
+    /Association Inauguration[^\n\r]*/i,
+    /Knowledge Outreach[^\n\r]*/i,
+    /Skill Development Programme[^\n\r]*/i
   ];
 
   for (const regex of titlePatterns) {
@@ -643,7 +654,7 @@ export function parseReportEntities(
     title.includes("VERSION:");
 
   if (isGenericTitle) {
-    const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on|organized a symposium titled|celebration on|celebration of|organized)\s+["']?([^"'\n\r\.]+)/i) ||
+    const topicMatch = sanitizedText.match(/(?:organized a guest lecture on|organized a workshop on|seminar on|session on|program on|organized a symposium titled|celebration on|celebration of|organized an educational visit titled|organized an extension activity titled|organized)\s+["']?([^"'\n\r\.]+)/i) ||
                        sanitizedText.match(/(?:CAMPUS TO CAREER SERIES[^\n\r]*)/i) ||
                        sanitizedText.match(/(?:Topic|Theme|Subject|Event Name|Title)\s*[:\-\s]*\s*([^\n\r]+)/i);
     if (topicMatch && (topicMatch[1] || topicMatch[0])) {
@@ -675,21 +686,20 @@ export function parseReportEntities(
     }
   }
 
-  // Format concise, punchy title (max 5-8 words, uppercase)
+  // Format concise, punchy title (max 6-9 words, uppercase)
   let cleanTitleCandidate = title
     .replace(/^[:\-\s•\*\."']+|[:\-\s•\*\."']+$/g, '')
     .replace(/^(?:A\s+|An\s+|The\s+)?(?:Report\s+on\s+|Activity\s+report\s+on\s+|Event\s+report\s+on\s+|Detailed\s+report\s+on\s+)/i, '')
     .trim();
 
-  // If candidate is a full sentence containing dates/venues or verbs, extract the core topic
   const splitMatch = cleanTitleCandidate.match(/^(.+?)(?:\s+(?:on|at|to\s+recognize|to\s+celebrate|held\s+on|conducted\s+on|organized\s+on)\s+(?:\d{1,2}|the\s+|KPRCAS|College|recognize|appreciate))/i);
   if (splitMatch && splitMatch[1] && splitMatch[1].trim().length >= 4) {
     cleanTitleCandidate = splitMatch[1].trim();
   }
 
   const titleWords = cleanTitleCandidate.split(/\s+/);
-  if (titleWords.length > 8 || cleanTitleCandidate.length > 65) {
-    cleanTitleCandidate = titleWords.slice(0, 7).join(' ');
+  if (titleWords.length > 9 || cleanTitleCandidate.length > 70) {
+    cleanTitleCandidate = titleWords.slice(0, 8).join(' ');
   }
 
   title = cleanTitleCandidate.toUpperCase().replace(/\s+/g, ' ').trim();
@@ -788,11 +798,6 @@ export function parseReportEntities(
   }
 
   // 5. Student Anchors / Vote of Thanks
-  let studentAnchors = "";
-  const anchorMatches = sanitizedText.match(/(?:Ms\.|Mr\.)\s+[A-Z][a-z\.\s]+,\s*(?:I|II|III|IV)\s+(?:IT|B\.Sc|BCA|CS|Commerce)[^\n.]*/gi);
-  if (anchorMatches && anchorMatches.length > 0) {
-    studentAnchors = anchorMatches.filter(a => !isBinaryOrXmlJunk(a)).join(', ');
-  }
 
   // 6. Class & Department
   let classDept = "";
@@ -837,7 +842,7 @@ export function parseReportEntities(
 
   // 9. Venue & Attendance (ONLY IF FOUND IN CURRENT DOCUMENT)
   let venue = "";
-  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\n\r,]+)/i);
+  const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\\n\\r,]+)/i);
   if (venueMatch && venueMatch[1] && !isBinaryOrXmlJunk(venueMatch[1])) {
     const vCandidate = venueMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time") && !vCandidate.toLowerCase().startsWith("page")) {
@@ -871,12 +876,13 @@ export function parseReportEntities(
     outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
-  // Collect any notable student winners/achievers/events mentioned in the text
+  // Collect notable student achievers mentioned in the text
   const studentNames: string[] = [];
-  const studentMatches = sanitizedText.match(/(?:Priya|Arun|Harini|Kavin|Deepak|Sneha|Sanjay|Divya|Rahul|Ananya|Vignesh|Swetha|Keerthana|Surya|Naveen|Gokul|Pavithra|Manoj)\s+[A-Z]\.?/g);
+  const studentMatches = sanitizedText.match(/(?:Mr\.|Ms\.)?\s+(?:Thirunageshwaran|Tarun Kumar|Vikas|Sudhakaran|Sahana|Sandya|Sowbharnica|Rakshita|Vaishnavi|Gowsika|Mahant|Ragul|Poojana|Shankavi|Suruthika|Tharunika|Vivinkumar|Arichandran|Rahul|Sathish|Yokesh|Pradakshina|Prakash|Pradeepa|Prada|Diksha|Vivin Kumar|Kanika|Praneeth|Sudharsan|Priya|Arun|Harini|Kavin|Deepak|Sneha|Sanjay|Divya|Ananya|Vignesh|Swetha|Keerthana|Surya|Naveen|Gokul|Pavithra|Manoj)(?:\s+[A-Z]\.?|\s+[A-Z][a-z]+)*/g);
   if (studentMatches) {
     studentMatches.forEach(name => {
-      if (!studentNames.includes(name)) studentNames.push(name);
+      const trimmed = name.trim();
+      if (!studentNames.includes(trimmed) && trimmed.length > 3) studentNames.push(trimmed);
     });
   }
 
@@ -886,69 +892,93 @@ export function parseReportEntities(
   const details = summary || purpose || sanitizedText.substring(0, 300);
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Intelligent 8-9 Line Newsletter Article Synthesizer (~120-160 words across 2 tight paragraphs)
-  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `DEPARTMENT OF ${classDept}`) : `DEPARTMENT OF ${defaultDepartment.toUpperCase()}`;
+  // 11. Professional Half-Page Journalistic Narrative Synthesis (~90-130 words, 6-9 lines of rich prose)
+  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
   const dateClause = date ? ` on ${date}` : '';
   const venueClause = venue ? ` at ${venue}` : '';
-  const partClause = participantInfo ? ` ${participantInfo}` : '';
-  const teamClause = teamName ? ` in collaboration with ${teamName},` : '';
+  const teamClause = teamName ? `, in collaboration with ${teamName},` : '';
 
-  // Paragraph 1: Lead, Speaker/Guest, and Purpose (~3-4 lines / ~60 words)
-  let p1 = `The ${deptDisplayName}, KPRCAS,${teamClause} organized the flagship program titled "${title}"${dateClause}${venueClause}${partClause}.`;
-  if (student) {
-    p1 += ` The occasion was graced by esteemed Chief Guest ${student}, who delivered an inspiring address sharing key practical perspectives.`;
-  } else if (principalName || deanName) {
-    const leadNames = [principalName, deanName].filter(Boolean).join(' and ');
-    p1 += ` The ceremony was presided over by ${leadNames}.`;
-  }
-  if (purpose && purpose.length > 15) {
-    // Extract first 1-2 core sentences of purpose
-    const purposeCore = purpose.split(/(?<=[.!?])\s+/)[0];
-    p1 += ` ${purposeCore}`;
-  }
+  let narrative = "";
 
-  // Paragraph 2: Core Highlights, Student Achievers & Outcomes (~4-5 lines / ~80 words)
-  let p2 = "";
-  if (summary && summary.length > 20) {
-    // Extract first 1-2 key substantive sentences from summary without form labels
-    const cleanSummary = summary
-      .replace(/^(?:1\.\s*Introduction|2\.\s*Summary|Events Conducted|Summary of the Event)[:\s]*/i, '')
-      .replace(/\bDepartment\s*:\s*[^\.]+\./gi, '')
-      .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
-      .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
-      .trim();
-    const summarySentences = cleanSummary.split(/(?<=[.!?])\s+/).filter(s => s.length > 20 && !s.toLowerCase().startsWith('venue') && !s.toLowerCase().startsWith('date'));
-    if (summarySentences.length > 0) {
-      p2 += summarySentences.slice(0, 2).join(' ') + ' ';
+  if (categoryTag === "STUDENT’S ACHIEVEMENTS") {
+    if (studentNames.length > 0) {
+      const achieversList = studentNames.slice(0, 4).join(', ');
+      narrative = `${achieversList} from ${classDept || 'B.Sc. IT'} achieved remarkable distinction in the academic initiative titled "${title}"${dateClause}${venueClause}. `;
+    } else {
+      narrative = `The ${deptDisplayName}, School of Computing Science, proudly organized the distinguished initiative titled "${title}"${dateClause}${venueClause}. `;
     }
-  }
 
-  if (studentNames.length > 0) {
-    p2 += `Notable student achievers (${studentNames.slice(0, 4).join(', ')}) demonstrated outstanding technical proficiency across all competitive tracks. `;
-  } else if (!p2) {
-    p2 += `Participants engaged in intensive technical sessions and collaborative problem-solving tracks, demonstrating exemplary proficiency. `;
-  }
+    if (summary && summary.length > 20) {
+      const cleanSummary = summary
+        .replace(/^(?:1\.\s*Introduction|2\.\s*Summary|Events Conducted|Summary of the Event)[:\s]*/i, '')
+        .replace(/\bDepartment\s*:\s*[^\.]+\./gi, '')
+        .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
+        .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
+        .trim();
+      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+    } else {
+      narrative += `Demonstrating exceptional technical acumen, disciplined collaboration, and problem-solving excellence, the participants delivered commendable presentations and prototypes. `;
+    }
 
-  if (outcome && outcome.length > 15) {
-    const outcomeCore = outcome.split(/(?<=[.!?])\s+/)[0].replace(/^(?:Key Outcomes|Outcome)[:\s]*/i, '');
-    p2 += `The initiative enabled participants to ${outcomeCore.toLowerCase().startsWith('to ') ? outcomeCore.substring(3) : outcomeCore}. `;
+    if (student) {
+      narrative += `The session was graced by ${student}, who commended the participants on their exemplary domain knowledge and practical execution. `;
+    }
+
+    narrative += `The Management, Principal Dr. P. Geetha, and faculty members warmly congratulate all achievers on their commendable milestone.`;
+
+  } else if (categoryTag === "FACULTY ACHIEVEMENT") {
+    const authorStr = student || "Faculty members from the Department of Information Technology";
+    narrative = `${authorStr} published an impactful research paper titled "${title}"${dateClause}. `;
+    
+    if (summary && summary.length > 20) {
+      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
+      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+    } else {
+      narrative += `The scholarly research presents innovative computational frameworks and algorithmic methodologies, undergoing rigorous peer review in an esteemed international journal. `;
+    }
+
+    narrative += `This landmark research achievement underscores the department's strong commitment to scientific excellence and intellectual contribution.`;
+
+  } else if (categoryTag === "STUDENT PARTICIPATION" || categoryTag === "EXTENSION ACTIVITY") {
+    narrative = `The ${deptDisplayName}, School of Computing Science${teamClause} organized the initiative titled "${title}"${dateClause}${venueClause}${participantInfo ? ` with ${participantInfo}` : ''}. `;
+    
+    if (summary && summary.length > 20) {
+      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
+      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+    } else {
+      narrative += `The initiative aimed to cultivate active social responsibility, practical hands-on exposure, and holistic learning among students. Participating delegates actively engaged in interactive sessions and collaborative field activities. `;
+    }
+
+    narrative += `The department faculty and organizers commended all student participants for making the initiative a resounding success.`;
+
   } else {
-    p2 += `The session enabled attendees to acquire practical domain competencies and valuable industry exposure. `;
+    // Standard DEPARTMENT EVENTS (Workshops, Seminars, Association Inauguration)
+    narrative = `The ${deptDisplayName}, School of Computing Science${teamClause} organized the academic program titled "${title}"${dateClause}${venueClause}. `;
+    
+    if (student) {
+      narrative += `The session was led by esteemed resource person ${student}, who delivered an insightful address providing students with valuable practical perspectives and modern industry exposure. `;
+    }
+
+    if (summary && summary.length > 20) {
+      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
+      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
+      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+    } else if (purpose && purpose.length > 20) {
+      narrative += `${purpose.split(/(?<=[.!?])\s+/)[0]} `;
+    }
+
+    narrative += `The interactive format enabled attendees to acquire practical domain competencies, fostering academic growth and professional readiness.`;
   }
 
-  if (studentAnchors) {
-    p2 += `Student coordinators (${studentAnchors}) facilitated the proceedings. `;
-  }
-
-  p2 += `The department faculty and leadership warmly congratulated all participants and coordinators for making ${title} a grand success.`;
-
-  const rawArticle = `${p1.trim()}\n\n${p2.trim()}`;
-  const article = deduplicateSentences(rawArticle);
+  const article = deduplicateSentences(narrative.trim());
 
   return {
     category,
     title,
-    teamName,
+    teamName: categoryTag, // Storing clean section tag in teamName for easy component consumption
     student,
     classDept,
     date: date || "",

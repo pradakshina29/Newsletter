@@ -1,13 +1,14 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEditor, ensureCanonicalPageStructure } from '../../context/EditorContext';
 import { CanvasElement } from '../../types/editor';
-import { Sparkles, Wand2, X } from 'lucide-react';
+import { Sparkles, Wand2, X, Crop } from 'lucide-react';
+import { ImageCropModal } from './ImageCropModal';
 
 const TextElementComponent: React.FC<{
   el: any;
   isSelected: boolean;
   onSelect: () => void;
-  onUpdate: (id: string, text: string) => void;
+  onUpdate: (id: string, text: string, height?: number) => void;
 }> = ({ el, isSelected, onSelect, onUpdate }) => {
   const divRef = useRef<HTMLDivElement>(null);
 
@@ -16,6 +17,15 @@ const TextElementComponent: React.FC<{
       divRef.current.innerText = el.text || '';
     }
   }, [el.text]);
+
+  const handleTextChange = () => {
+    if (!el.locked && divRef.current) {
+      const newText = divRef.current.innerText;
+      const scrollH = divRef.current.scrollHeight;
+      const newHeight = Math.max(el.height || 20, Math.ceil(scrollH));
+      onUpdate(el.id, newText, newHeight);
+    }
+  };
 
   return (
     <div
@@ -28,16 +38,8 @@ const TextElementComponent: React.FC<{
         e.stopPropagation();
         if (!el.locked) onSelect();
       }}
-      onBlur={() => {
-        if (!el.locked && divRef.current) {
-          onUpdate(el.id, divRef.current.innerText);
-        }
-      }}
-      onInput={() => {
-        if (!el.locked && divRef.current) {
-          onUpdate(el.id, divRef.current.innerText);
-        }
-      }}
+      onBlur={handleTextChange}
+      onInput={handleTextChange}
       className={`w-full h-full focus:outline-none ${el.locked ? 'cursor-default select-none' : 'cursor-text'} ${isSelected && !el.locked ? 'ring-1 ring-primary/60 bg-blue-50/10' : !el.locked ? 'hover:bg-blue-50/5' : ''}`}
       style={{
         fontSize: typeof el.fontSize === 'number' ? `${el.fontSize}px` : (el.fontSize || '14px'),
@@ -51,7 +53,9 @@ const TextElementComponent: React.FC<{
         letterSpacing: el.letterSpacing !== undefined ? `${el.letterSpacing}px` : 'normal',
         wordSpacing: (el as any).wordSpacing !== undefined ? `${(el as any).wordSpacing}px` : undefined,
         whiteSpace: 'pre-wrap',
-        overflow: 'hidden'
+        overflow: 'visible',
+        wordBreak: 'break-word',
+        minHeight: `${el.height || 20}px`
       }}
     >
       {el.text}
@@ -143,6 +147,7 @@ const CanvasWorkspace: React.FC<{
   // Dragging & Resizing States
   const [dragState, setDragState] = useState<{
     elementId: string;
+    pageId: string;
     startX: number;
     startY: number;
     startLeft: number;
@@ -152,6 +157,9 @@ const CanvasWorkspace: React.FC<{
     action: 'drag' | 'resize' | 'rotate' | null;
     handle: string | null;
   } | null>(null);
+
+  // Active Crop Element
+  const [cropElement, setCropElement] = useState<CanvasElement | null>(null);
 
   // AI Page Customize States
   const [aiCustomPageId, setAiCustomPageId] = useState<string | null>(null);
@@ -321,13 +329,15 @@ const CanvasWorkspace: React.FC<{
     e.stopPropagation();
     if (element.locked && action !== 'rotate') return;
 
+    const targetPageId = pageId || activePageId;
     setSelectedElementId(element.id);
-    if (pageId && activePageId !== pageId) {
-      setActivePageId(pageId);
+    if (targetPageId && activePageId !== targetPageId) {
+      setActivePageId(targetPageId);
     }
 
     setDragState({
       elementId: element.id,
+      pageId: targetPageId,
       startX: e.clientX,
       startY: e.clientY,
       startLeft: element.x,
@@ -342,9 +352,12 @@ const CanvasWorkspace: React.FC<{
   // Drag-and-resize mouse listener
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      if (!dragState || !activePageId) return;
+      if (!dragState) return;
 
-      const page = activeProject.pages.find(p => p.id === activePageId);
+      let page = activeProject.pages.find(p => p.id === dragState.pageId);
+      if (!page) {
+        page = activeProject.pages.find(p => p.elements.some(el => el.id === dragState.elementId));
+      }
       if (!page) return;
 
       const element = page.elements.find(el => el.id === dragState.elementId);
@@ -457,7 +470,7 @@ const CanvasWorkspace: React.FC<{
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragState, zoom, activePageId, updateElement, setGuides]);
+  }, [dragState, zoom, updateElement, setGuides]);
 
   const handlePageClick = (pageId: string) => {
     setActivePageId(pageId);
@@ -492,7 +505,7 @@ const CanvasWorkspace: React.FC<{
                   setActivePageId(pageId);
                 }
               }}
-              onUpdate={(id, text) => updateElement(id, { text })}
+              onUpdate={(id, text, height) => updateElement(id, height ? { text, height } : { text })}
             />
           );
 
@@ -611,19 +624,67 @@ const CanvasWorkspace: React.FC<{
           }
         }}
         onMouseDown={(e) => {
-          if (el.type === 'text') return;
+          // If clicking text, only drag when clicking borders or when selected
           handleMouseDown(e, el, 'drag', null, pageId);
         }}
         className={`group ${isSelected ? 'ring-2 ring-primary ring-offset-1' : 'hover:ring-1 hover:ring-primary/40'} ${el.type === 'text' ? '' : 'select-none'}`}
       >
         {innerContent()}
 
-        {/* Selected Resizer Handles overlay */}
+        {/* Selected Quick Floating Toolbar & Resizer Handles overlay */}
         {isSelected && !el.locked && (
           <>
+            {/* Quick Canvas Floating Toolbar on top of selected element */}
+            <div className="absolute -top-9 left-0 flex items-center space-x-1 bg-slate-900 text-white rounded-xl px-2 py-1 shadow-lg text-[10px] font-bold z-50 pointer-events-auto">
+              {el.type === 'image' && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setCropElement(el);
+                    }}
+                    className="px-2 py-0.5 hover:bg-indigo-600 rounded text-amber-300 flex items-center space-x-1"
+                    title="Crop Image"
+                  >
+                    <Crop className="w-3 h-3" />
+                    <span>Crop</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      updateElement(el.id, { width: 700, height: 350 });
+                    }}
+                    className="px-2 py-0.5 hover:bg-slate-800 rounded text-slate-200"
+                    title="Full Width 700px"
+                  >
+                    Full Width
+                  </button>
+                </>
+              )}
+              {el.type === 'text' && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const elDom = document.getElementById(el.id);
+                    if (elDom) {
+                      const scrollH = elDom.scrollHeight;
+                      updateElement(el.id, { height: Math.max(el.height, scrollH) });
+                    }
+                  }}
+                  className="px-2 py-0.5 hover:bg-slate-800 rounded text-slate-200"
+                  title="Expand box to fit text height"
+                >
+                  Auto Height
+                </button>
+              )}
+            </div>
+
             {/* Rotate handler bubble */}
             <div 
-              onMouseDown={(e) => handleMouseDown(e, el, 'rotate')}
+              onMouseDown={(e) => handleMouseDown(e, el, 'rotate', null, pageId)}
               className="absolute -top-10 left-1/2 -translate-x-1/2 w-6 h-6 bg-white border border-slate-200 rounded-full flex items-center justify-center shadow-md cursor-pointer hover:bg-slate-50 hover:scale-105 active:scale-95 transition-all z-50"
               title="Rotate"
             >
@@ -633,16 +694,16 @@ const CanvasWorkspace: React.FC<{
             </div>
 
             {/* Corner Resize Handles */}
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'nw')} className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nwse-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'ne')} className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nesw-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'sw')} className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nesw-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'se')} className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nwse-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'nw', pageId)} className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nwse-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'ne', pageId)} className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nesw-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'sw', pageId)} className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nesw-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'se', pageId)} className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-primary rounded-full cursor-nwse-resize shadow z-10" />
 
             {/* Edges Resize Handles */}
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'n')} className="absolute -top-1 left-1/2 -translate-x-1/2 w-3.5 h-1.5 bg-white border border-primary rounded-full cursor-ns-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 's')} className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3.5 h-1.5 bg-white border border-primary rounded-full cursor-ns-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'e')} className="absolute top-1/2 -translate-y-1/2 -right-1 w-1.5 h-3.5 bg-white border border-primary rounded-full cursor-ew-resize shadow z-10" />
-            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'w')} className="absolute top-1/2 -translate-y-1/2 -left-1 w-1.5 h-3.5 bg-white border border-primary rounded-full cursor-ew-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'n', pageId)} className="absolute -top-1 left-1/2 -translate-x-1/2 w-3.5 h-1.5 bg-white border border-primary rounded-full cursor-ns-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 's', pageId)} className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-3.5 h-1.5 bg-white border border-primary rounded-full cursor-ns-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'e', pageId)} className="absolute top-1/2 -translate-y-1/2 -right-1 w-1.5 h-3.5 bg-white border border-primary rounded-full cursor-ew-resize shadow z-10" />
+            <div onMouseDown={(e) => handleMouseDown(e, el, 'resize', 'w', pageId)} className="absolute top-1/2 -translate-y-1/2 -left-1 w-1.5 h-3.5 bg-white border border-primary rounded-full cursor-ew-resize shadow z-10" />
           </>
         )}
       </div>
@@ -839,6 +900,22 @@ const CanvasWorkspace: React.FC<{
             </div>
           </div>
         </div>
+      )}
+
+      {/* Interactive Image Crop Modal Popup */}
+      {cropElement && cropElement.type === 'image' && (
+        <ImageCropModal
+          imageUrl={cropElement.url}
+          onClose={() => setCropElement(null)}
+          onApplyCrop={(croppedUrl, croppedW, croppedH) => {
+            updateElement(cropElement.id, {
+              url: croppedUrl,
+              width: Math.min(700, croppedW || cropElement.width),
+              height: Math.min(800, croppedH || cropElement.height)
+            });
+            setCropElement(null);
+          }}
+        />
       )}
     </div>
   );

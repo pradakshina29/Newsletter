@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
 import { CanvasElement, TableElement } from '../../types/editor';
-import { AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Trash2, Copy, Lock, Unlock, ArrowUp, ArrowDown, Sparkles, Wand2, Type } from 'lucide-react';
+import { AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Trash2, Copy, Lock, Unlock, ArrowUp, ArrowDown, Sparkles, Wand2, Type, Crop, Upload } from 'lucide-react';
 import { detectAndFixCase } from '../../utils/textCase';
+import { ImageCropModal } from './ImageCropModal';
 
 const FONTS = ['Poppins', 'Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Monospace'];
 
@@ -24,6 +25,7 @@ const PropertiesPanel: React.FC = () => {
   } = useEditor();
 
   const [aiLoading, setAiLoading] = useState<boolean>(false);
+  const [showCropModal, setShowCropModal] = useState<boolean>(false);
 
   if (!activeProject || !activePageId) return null;
 
@@ -596,10 +598,97 @@ const PropertiesPanel: React.FC = () => {
         <div className="space-y-5">
           <div>
             <h3 className="font-bold text-sm text-secondary">Image Properties</h3>
-            <p className="text-[10px] text-slate-400 mt-0.5">Adjust image corners, shadows, and links.</p>
+            <p className="text-[10px] text-slate-400 mt-0.5">Crop, adjust sizing, border radius, and object fit.</p>
           </div>
 
           <div className="space-y-4">
+            {/* Interactive Crop Image Button */}
+            <button
+              type="button"
+              onClick={() => setShowCropModal(true)}
+              className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-primary hover:from-indigo-700 hover:to-primary-dark text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center space-x-2 border border-white/10"
+            >
+              <Crop className="w-4 h-4 text-amber-300 animate-pulse" />
+              <span>Crop & Scale Image</span>
+            </button>
+
+            {/* Quick Dimension Presets */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-slate-400 uppercase">Size Presets</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ width: 700, height: 350 })}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 text-left"
+                >
+                  Full Width (700×350)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ width: 340, height: 220 })}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 text-left"
+                >
+                  Half Width (340×220)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ width: 250, height: 250, borderRadius: 125 })}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 text-left"
+                >
+                  Circle Card (250×250)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleUpdate({ width: 700, height: 160 })}
+                  className="p-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-[10px] font-bold text-slate-700 text-left"
+                >
+                  Banner Header (700×160)
+                </button>
+              </div>
+            </div>
+
+            {/* Object Fit Control */}
+            <div className="space-y-1">
+              <label className="text-[9px] font-bold text-slate-400 uppercase">Object Fit Mode</label>
+              <select
+                value={(el as any).objectFit || 'cover'}
+                onChange={e => handleUpdate({ objectFit: e.target.value } as any)}
+                className="w-full border border-slate-200 rounded-lg p-1.5 text-xs text-slate-700 focus:outline-none"
+              >
+                <option value="cover font-semibold">Cover (Crop overflow to fill frame)</option>
+                <option value="contain">Contain (Fit full image inside frame)</option>
+                <option value="fill">Fill (Stretch image exact to frame)</option>
+                <option value="none">Original Scale</option>
+              </select>
+            </div>
+
+            {/* Replace Image Upload */}
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-slate-400 uppercase block">Replace Image File</label>
+              <label className="w-full py-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-center block cursor-pointer text-xs font-bold text-slate-700 transition-colors">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={e => {
+                    if (e.target.files && e.target.files[0]) {
+                      const reader = new FileReader();
+                      reader.onload = (uploadEv) => {
+                        if (uploadEv.target?.result) {
+                          handleUpdate({ url: uploadEv.target.result as string });
+                        }
+                      };
+                      reader.readAsDataURL(e.target.files[0]);
+                    }
+                  }}
+                  className="hidden"
+                />
+                <span className="flex items-center justify-center space-x-1.5">
+                  <Upload className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Upload New Photo</span>
+                </span>
+              </label>
+            </div>
+
             <div className="space-y-1">
               <label className="text-[10px] font-bold text-slate-400 uppercase">Image URL Link</label>
               <input
@@ -611,12 +700,12 @@ const PropertiesPanel: React.FC = () => {
             </div>
 
             {/* Rounded Corner Slider */}
-            <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 pt-2">
+            <div className="flex justify-between items-center text-[10px] font-bold text-slate-500 pt-1">
               <span>Border Radius ({el.borderRadius}px)</span>
               <input
                 type="range"
                 min="0"
-                max="50"
+                max="125"
                 value={el.borderRadius}
                 onChange={e => handleUpdate({ borderRadius: parseInt(e.target.value) })}
                 className="w-1/2 h-1 bg-slate-200 rounded-lg cursor-pointer accent-primary"
@@ -624,7 +713,7 @@ const PropertiesPanel: React.FC = () => {
             </div>
 
             {/* Shadow Select Dropdown */}
-            <div className="space-y-1 pt-2">
+            <div className="space-y-1">
               <label className="text-[9px] font-bold text-slate-400 uppercase">Shadow Blur</label>
               <select
                 value={el.shadow}
@@ -640,6 +729,22 @@ const PropertiesPanel: React.FC = () => {
           </div>
 
           {renderGeneralControls(el)}
+
+          {/* Render Crop Modal when active */}
+          {showCropModal && (
+            <ImageCropModal
+              imageUrl={el.url}
+              onClose={() => setShowCropModal(false)}
+              onApplyCrop={(croppedUrl, croppedW, croppedH) => {
+                setShowCropModal(false);
+                handleUpdate({
+                  url: croppedUrl,
+                  width: Math.min(700, croppedW || el.width),
+                  height: Math.min(800, croppedH || el.height)
+                });
+              }}
+            />
+          )}
         </div>
       );
     }

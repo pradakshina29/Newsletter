@@ -1362,132 +1362,68 @@ const ContentWizardPanel: React.FC = () => {
         { id: `p${targetPageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${targetPageNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, italic: false, underline: false, align: "center", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true, zIndex: 50 }
       ];
 
-      const cleanTitle = detectAndFixCase(reportConfirmData.title, 'title');
-      const titleLen = cleanTitle.length;
-      const titleHeight = titleLen > 55 ? 46 : 28;
-      const titleFontSize = titleLen > 70 ? 15.5 : titleLen > 50 ? 16.5 : 18;
+      const cleanTitle = detectAndFixCase(reportConfirmData.title, 'title').toUpperCase();
+      const categoryTag = reportConfirmData.teamName || (reportConfirmData.category === 'student' ? 'STUDENT’S ACHIEVEMENTS' : reportConfirmData.category === 'faculty' ? 'FACULTY ACHIEVEMENT' : 'DEPARTMENT EVENTS');
+      const hasPhotos = (reportConfirmData.photos || []).length > 0;
 
-      let currentY = 215;
-
-      // 1. Article Title Banner (Positioned cleanly at y: 215 in safe area)
+      // 1. Category Section Tag (Positioned at y: 205)
       const contentElements: any[] = [
+        {
+          id: `p${targetPageNum}_category_tag`,
+          type: 'text',
+          x: 50,
+          y: 205,
+          width: 700,
+          height: 22,
+          text: categoryTag,
+          fontSize: 13,
+          fontFamily: 'Poppins',
+          bold: true,
+          italic: false,
+          underline: false,
+          lineHeight: 1.2,
+          letterSpacing: 2.0,
+          color: '#000000',
+          align: 'center',
+          rotation: 0,
+          opacity: 100
+        },
+        // 2. Main Event Headline (Positioned at y: 235)
         {
           id: `p${targetPageNum}_title`,
           type: 'text',
           x: 50,
-          y: currentY,
+          y: 235,
           width: 700,
-          height: titleHeight,
+          height: cleanTitle.length > 55 ? 44 : 26,
           text: cleanTitle,
-          fontSize: titleFontSize,
+          fontSize: 15,
           fontFamily: 'Poppins',
           bold: true,
           italic: false,
           underline: false,
           lineHeight: 1.25,
-          letterSpacing: 0,
-          color: '#1E40AF',
+          letterSpacing: 0.5,
+          color: '#000000',
           align: 'center',
           rotation: 0,
           opacity: 100
         }
       ];
 
-      currentY += titleHeight + 8;
-
-      // 2. Subtitle / Resource Person & Event Date Banner (Dynamic: Only show what is actually present)
-      const subParts = [
-        reportConfirmData.student ? `Resource Person: ${detectAndFixCase(reportConfirmData.student, 'title')}` : '',
-        reportConfirmData.date && reportConfirmData.date !== "Current Academic Year" ? `Date: ${reportConfirmData.date}` : '',
-        reportConfirmData.venue ? `Venue: ${detectAndFixCase(reportConfirmData.venue, 'title')}` : ''
-      ].filter(Boolean);
-
-      if (subParts.length > 0) {
-        const subText = subParts.join(' | ');
-        const subHeight = subText.length > 85 ? 32 : 20;
-        const subFontSize = subText.length > 85 ? 10 : 10.5;
-
-        contentElements.push({
-          id: `p${targetPageNum}_sub_title`,
-          type: 'text',
-          x: 50,
-          y: currentY,
-          width: 700,
-          height: subHeight,
-          text: subText,
-          fontSize: subFontSize,
-          fontFamily: 'Poppins',
-          bold: true,
-          italic: false,
-          underline: false,
-          lineHeight: 1.35,
-          letterSpacing: 0,
-          color: '#0F172A',
-          align: 'center',
-          rotation: 0,
-          opacity: 100
-        });
-
-        currentY += subHeight + 4;
-      }
-
-      // 3. Dignitaries Badge (Only if host provided)
-      if (reportConfirmData.host && reportConfirmData.host.trim().length > 5) {
-        const cleanHost = detectAndFixCase(reportConfirmData.host.replace(/\s+/g, ' ').trim(), 'title');
-        contentElements.push({
-          id: `p${targetPageNum}_host`,
-          type: 'text',
-          x: 50,
-          y: currentY,
-          width: 700,
-          height: 18,
-          text: `Presided by: ${cleanHost}`,
-          fontSize: 9.5,
-          fontFamily: 'Poppins',
-          bold: true,
-          italic: true,
-          underline: false,
-          lineHeight: 1.3,
-          letterSpacing: 0,
-          color: '#EA580C',
-          align: 'center',
-          rotation: 0,
-          opacity: 100
-        });
-
-        currentY += 22;
-      }
-
-      // 4. Subtle Meta Divider Line
-      contentElements.push({
-        id: `p${targetPageNum}_meta_line`,
-        type: 'shape',
-        shapeType: 'rect',
-        x: 180,
-        y: currentY + 2,
-        width: 440,
-        height: 1,
-        fillColor: '#CBD5E1',
-        strokeColor: 'transparent',
-        strokeWidth: 0,
-        opacity: 80,
-        rotation: 0
-      });
-
-      currentY += 10;
-
-      // 5. Body Narrative Paragraph
-      const hasPhotos = (reportConfirmData.photos || []).length > 0;
+      const bodyStartY = cleanTitle.length > 55 ? 290 : 275;
       const bodyText = reportConfirmData.article || '';
-      const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
-      const bodyFontSize = (hasPhotos && bodyText.length > 650) ? 9.5 : 10.5;
+      const bodyHeight = hasPhotos ? 240 : 740;
+      const bodyFontSize = hasPhotos ? 13.5 : 14.5;
+      const bodyLineHeight = hasPhotos ? 1.55 : 1.65;
 
+      // 3. Rich Half-Page Journalistic Narrative Body
       contentElements.push({
         id: `p${targetPageNum}_text`,
         type: 'text',
-        x: 50,
-        y: currentY,
-        width: 700,
+        x: 55,
+        y: bodyStartY,
+        width: 690,
         height: bodyHeight,
         text: bodyText,
         fontSize: bodyFontSize,
@@ -1495,44 +1431,109 @@ const ContentWizardPanel: React.FC = () => {
         bold: false,
         italic: false,
         underline: false,
-        lineHeight: 1.5,
+        lineHeight: bodyLineHeight,
         letterSpacing: 0,
-        color: '#334155',
+        color: '#0F172A',
         align: 'left',
         rotation: 0,
         opacity: 100
       });
 
-      // 6. Photos Gallery (Placed cleanly at y: 550)
-      const validPhotos = (reportConfirmData.photos || []).slice(0, 3);
-      validPhotos.forEach((photoUrl, idx) => {
-        let x = 50;
-        let y = 550;
-        let width = 700;
-        let height = 325;
-
-        if (validPhotos.length === 1) {
-          x = 100; y = 550; width = 600; height = 325;
-        } else if (validPhotos.length === 2) {
-          x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
-        } else if (validPhotos.length === 3) {
-          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
-        }
-
+      // 4. Photos Gallery (Placed in the lower half at y: 535)
+      const validPhotos = (reportConfirmData.photos || []).slice(0, 4);
+      if (validPhotos.length === 1) {
         contentElements.push({
-          id: `p${targetPageNum}_img_${idx + 1}`,
+          id: `p${targetPageNum}_img_1`,
           type: 'image',
-          x,
-          y,
-          width,
-          height,
-          url: photoUrl,
-          borderRadius: 10,
+          x: 100,
+          y: 535,
+          width: 600,
+          height: 480,
+          url: validPhotos[0],
+          borderRadius: 8,
           shadow: 'md',
           rotation: 0,
           opacity: 100
         });
-      });
+      } else if (validPhotos.length === 2) {
+        contentElements.push(
+          {
+            id: `p${targetPageNum}_img_1`,
+            type: 'image',
+            x: 55,
+            y: 535,
+            width: 335,
+            height: 480,
+            url: validPhotos[0],
+            borderRadius: 8,
+            shadow: 'md',
+            rotation: 0,
+            opacity: 100
+          },
+          {
+            id: `p${targetPageNum}_img_2`,
+            type: 'image',
+            x: 410,
+            y: 535,
+            width: 335,
+            height: 480,
+            url: validPhotos[1],
+            borderRadius: 8,
+            shadow: 'md',
+            rotation: 0,
+            opacity: 100
+          }
+        );
+      } else if (validPhotos.length === 3) {
+        contentElements.push(
+          {
+            id: `p${targetPageNum}_img_1`,
+            type: 'image',
+            x: 55,
+            y: 535,
+            width: 690,
+            height: 235,
+            url: validPhotos[0],
+            borderRadius: 8,
+            shadow: 'md',
+            rotation: 0,
+            opacity: 100
+          },
+          {
+            id: `p${targetPageNum}_img_2`,
+            type: 'image',
+            x: 55,
+            y: 785,
+            width: 335,
+            height: 235,
+            url: validPhotos[1],
+            borderRadius: 8,
+            shadow: 'md',
+            rotation: 0,
+            opacity: 100
+          },
+          {
+            id: `p${targetPageNum}_img_3`,
+            type: 'image',
+            x: 410,
+            y: 785,
+            width: 335,
+            height: 235,
+            url: validPhotos[2],
+            borderRadius: 8,
+            shadow: 'md',
+            rotation: 0,
+            opacity: 100
+          }
+        );
+      } else if (validPhotos.length >= 4) {
+        contentElements.push(
+          { id: `p${targetPageNum}_img_1`, type: 'image', x: 55, y: 535, width: 335, height: 235, url: validPhotos[0], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_2`, type: 'image', x: 410, y: 535, width: 335, height: 235, url: validPhotos[1], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_3`, type: 'image', x: 55, y: 785, width: 335, height: 235, url: validPhotos[2], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_4`, type: 'image', x: 410, y: 785, width: 335, height: 235, url: validPhotos[3], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 }
+        );
+      }
 
       const updatedElements = [
         ...headerElements,
