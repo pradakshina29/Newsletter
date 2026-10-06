@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useEditor } from '../context/EditorContext';
+import { useEditor, ensureCanonicalPageStructure } from '../context/EditorContext';
 import { useNotification } from '../context/NotificationContext';
 import { UserSession } from '../types/editor';
 import SidebarTools from './editor/SidebarTools';
@@ -664,12 +664,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       });
 
       for (let pageIdx = 0; pageIdx < activeProject.pages.length; pageIdx++) {
-        const page = activeProject.pages[pageIdx];
+        const rawPage = activeProject.pages[pageIdx];
+        const page = ensureCanonicalPageStructure(rawPage, pageIdx + 1, activeProject.department || "Information Technology");
+        const pageBgColor = (page.elements.find((el: any) => el.id?.endsWith('_bg') || el.id === 'bg') as any)?.fillColor || '#EFEFEF';
 
         // Render page DOM unscaled with embedded Google Fonts
         exportContainer.innerHTML = `
           <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;600;700&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap">
-          <div style="position: relative; width: 800px; height: 1130px; background-color: #EFEFEF; overflow: hidden; font-family: 'Poppins', sans-serif;">
+          <div style="position: relative; width: 800px; height: 1130px; background-color: ${pageBgColor}; overflow: hidden; font-family: 'Poppins', sans-serif;">
             ${(page.elements || []).map((el: any) => {
               if (el.type === 'shape') {
                 if (el.id?.includes('line_div') || el.id?.includes('diamond_div')) return '';
@@ -704,7 +706,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           useCORS: true,
           logging: false,
           allowTaint: true,
-          backgroundColor: '#EFEFEF'
+          backgroundColor: pageBgColor
         });
 
         const imgData = canvasObj.toDataURL('image/jpeg', 0.98);
@@ -758,14 +760,15 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       );
 
       for (let pageIdx = 0; pageIdx < activeProject.pages.length; pageIdx++) {
-        const page = activeProject.pages[pageIdx];
+        const rawPage = activeProject.pages[pageIdx];
+        const page = ensureCanonicalPageStructure(rawPage, pageIdx + 1, activeProject.department || "Information Technology");
         const pageNum = pageIdx + 1;
 
         docChildren.push(
           new Paragraph({
             children: [
               new TextRun({
-                text: `--- PAGE ${pageNum} ---`,
+                text: `--- PAGE ${pageNum}${page.title ? `: ${page.title.toUpperCase()}` : ''} ---`,
                 bold: true,
                 size: 20,
                 font: "Arial",
@@ -781,7 +784,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
         for (const el of sortedElements) {
           if (el.type === 'text') {
-            if (el.id?.includes('line_') || el.id?.includes('div_')) continue;
+            if (el.id?.includes('line_') || el.id?.includes('div_') || el.id?.endsWith('_bg')) continue;
 
             const isTitle = el.id?.includes('title') || el.id?.includes('heading') || el.id?.includes('hdr');
             const fontHalfPoints = el.fontSize ? Math.round(el.fontSize * 2) : 22;

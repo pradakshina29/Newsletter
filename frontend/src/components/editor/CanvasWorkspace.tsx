@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEditor, ensureCanonicalPageStructure } from '../../context/EditorContext';
 import { CanvasElement } from '../../types/editor';
-import { Sparkles, Wand2, X, Crop } from 'lucide-react';
+import { Sparkles, Wand2, X, Crop, Copy, Trash2, Move, ArrowUp, ArrowDown } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 
 const TextElementComponent: React.FC<{
@@ -80,6 +80,10 @@ const CanvasWorkspace: React.FC<{
     setSelectedElementId,
     setActivePageId,
     updateElement,
+    deleteElement,
+    duplicateElement,
+    bringToFront,
+    sendToBack,
     setGuides,
     updatePageElements,
     isGenerating
@@ -166,6 +170,51 @@ const CanvasWorkspace: React.FC<{
   const [aiCustomPageNum, setAiCustomPageNum] = useState<number>(0);
   const [aiPromptText, setAiPromptText] = useState<string>('');
   const [aiCustomizing, setAiCustomizing] = useState<boolean>(false);
+
+  // Keyboard shortcuts (Ctrl+C, Ctrl+V, Ctrl+D, Delete/Backspace)
+  const clipboardRef = useRef<CanvasElement | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const activeEl = document.activeElement;
+      const isEditingText = activeEl && (
+        activeEl.tagName === 'INPUT' ||
+        activeEl.tagName === 'TEXTAREA' ||
+        activeEl.getAttribute('contenteditable') === 'true'
+      );
+
+      if (isEditingText) return;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'c') {
+        if (selectedElementId && activeProject) {
+          for (const page of activeProject.pages) {
+            const found = page.elements.find(el => el.id === selectedElementId);
+            if (found) {
+              clipboardRef.current = found;
+              break;
+            }
+          }
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'v') {
+        if (clipboardRef.current) {
+          duplicateElement(clipboardRef.current.id);
+        }
+      } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        if (selectedElementId) {
+          e.preventDefault();
+          duplicateElement(selectedElementId);
+        }
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        if (selectedElementId) {
+          e.preventDefault();
+          deleteElement(selectedElementId);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedElementId, activeProject, duplicateElement, deleteElement]);
 
   const handleAiCustomizePage = (pageId: string, pageNum: number) => {
     setAiCustomPageId(pageId);
@@ -635,7 +684,33 @@ const CanvasWorkspace: React.FC<{
         {isSelected && !el.locked && (
           <>
             {/* Quick Canvas Floating Toolbar on top of selected element */}
-            <div className="absolute -top-9 left-0 flex items-center space-x-1 bg-slate-900 text-white rounded-xl px-2 py-1 shadow-lg text-[10px] font-bold z-50 pointer-events-auto">
+            <div className="absolute -top-10 left-0 flex items-center space-x-1 bg-slate-900/95 backdrop-blur-md text-white rounded-xl px-2 py-1 shadow-xl text-[10px] font-bold z-50 pointer-events-auto border border-white/10 select-none">
+              {/* Drag Move Handle */}
+              <div 
+                onMouseDown={(e) => handleMouseDown(e, el, 'drag', null, pageId)} 
+                className="px-1.5 py-0.5 hover:bg-slate-800 rounded text-indigo-400 cursor-grab active:cursor-grabbing flex items-center space-x-1" 
+                title="Drag to move element around page"
+              >
+                <Move className="w-3.5 h-3.5" />
+                <span className="text-[9px]">Move</span>
+              </div>
+
+              <div className="w-[1px] h-3 bg-slate-700 mx-0.5" />
+
+              {/* Duplicate / Copy Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  duplicateElement(el.id);
+                }}
+                className="px-2 py-0.5 hover:bg-slate-800 rounded text-slate-200 flex items-center space-x-1"
+                title="Duplicate / Copy Element (Ctrl+D)"
+              >
+                <Copy className="w-3 h-3 text-cyan-400" />
+                <span>Duplicate</span>
+              </button>
+
               {el.type === 'image' && (
                 <>
                   <button
@@ -663,6 +738,7 @@ const CanvasWorkspace: React.FC<{
                   </button>
                 </>
               )}
+
               {el.type === 'text' && (
                 <button
                   type="button"
@@ -680,6 +756,48 @@ const CanvasWorkspace: React.FC<{
                   Auto Height
                 </button>
               )}
+
+              <div className="w-[1px] h-3 bg-slate-700 mx-0.5" />
+
+              {/* Layer Ordering */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  bringToFront(el.id);
+                }}
+                className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"
+                title="Bring Forward"
+              >
+                <ArrowUp className="w-3 h-3" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  sendToBack(el.id);
+                }}
+                className="p-1 hover:bg-slate-800 rounded text-slate-300 hover:text-white"
+                title="Send Backward"
+              >
+                <ArrowDown className="w-3 h-3" />
+              </button>
+
+              <div className="w-[1px] h-3 bg-slate-700 mx-0.5" />
+
+              {/* Delete Button */}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  deleteElement(el.id);
+                }}
+                className="px-2 py-0.5 hover:bg-red-600/30 rounded text-red-400 hover:text-red-300 flex items-center space-x-1"
+                title="Delete Element (Delete)"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Delete</span>
+              </button>
             </div>
 
             {/* Rotate handler bubble */}

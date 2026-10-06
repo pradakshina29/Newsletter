@@ -628,7 +628,7 @@ const ContentWizardPanel: React.FC = () => {
     currentY += 10;
 
     // Body narrative paragraph
-    const validPhotos = (photos || []).slice(0, 3);
+    const validPhotos = photos || [];
     const hasPhotos = validPhotos.length > 0;
 
     if (structuredText.trim()) {
@@ -659,33 +659,48 @@ const ContentWizardPanel: React.FC = () => {
       });
     }
 
-    if (photos && photos.length > 3) {
-      showWarning("Maximum 3 photos allowed for this content item. Placing top 3 photos into layout.", "Photo Limit");
-    }
-
-    // Photos Gallery
+    // Photos Gallery Layout Engine
     if (hasPhotos) {
+      const totalP = validPhotos.length;
       validPhotos.forEach((photoUrl, idx) => {
         let x = 50;
         let y = 550;
         let width = 700;
         let height = 325;
 
-        if (validPhotos.length === 1) {
-          x = 100;
-          y = 550;
-          width = 600;
-          height = 325;
-        } else if (validPhotos.length === 2) {
-          x = idx === 0 ? 50 : 415;
-          y = 550;
+        if (totalP === 1) {
+          x = 100; y = 550; width = 600; height = 325;
+        } else if (totalP === 2) {
+          x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
+        } else if (totalP === 3) {
+          x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
+        } else if (totalP === 4) {
+          const row = Math.floor(idx / 2);
+          const col = idx % 2;
+          x = col === 0 ? 50 : 415;
+          y = row === 0 ? 550 : 775;
           width = 335;
-          height = 325;
-        } else if (validPhotos.length === 3) {
-          x = idx === 0 ? 50 : idx === 1 ? 290 : 530;
-          y = 550;
+          height = 210;
+        } else if (totalP === 5) {
+          if (idx < 2) {
+            x = idx === 0 ? 50 : 415;
+            y = 550;
+            width = 335;
+            height = 210;
+          } else {
+            const col = idx - 2;
+            x = col === 0 ? 50 : col === 1 ? 290 : 530;
+            y = 775;
+            width = 220;
+            height = 210;
+          }
+        } else {
+          const row = Math.floor(idx / 3);
+          const col = idx % 3;
+          x = col === 0 ? 50 : col === 1 ? 290 : 530;
+          y = 550 + (row * 175);
           width = 220;
-          height = 325;
+          height = 160;
         }
 
         contentElements.push({

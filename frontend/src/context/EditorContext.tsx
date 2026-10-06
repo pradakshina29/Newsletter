@@ -255,18 +255,48 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       }
     }
 
-    uniquePhotos.slice(0, 3).forEach((photo, idx) => {
+    const totalP = uniquePhotos.length;
+    uniquePhotos.forEach((photo, idx) => {
       let x = 50;
       let y = 550;
       let width = 700;
       let height = 325;
-      if (uniquePhotos.length === 1) {
+
+      if (totalP === 1) {
         x = 100; y = 550; width = 600; height = 325;
-      } else if (uniquePhotos.length === 2) {
+      } else if (totalP === 2) {
         x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
-      } else if (uniquePhotos.length >= 3) {
+      } else if (totalP === 3) {
         x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
+      } else if (totalP === 4) {
+        const row = Math.floor(idx / 2);
+        const col = idx % 2;
+        x = col === 0 ? 50 : 415;
+        y = row === 0 ? 550 : 775;
+        width = 335;
+        height = 210;
+      } else if (totalP === 5) {
+        if (idx < 2) {
+          x = idx === 0 ? 50 : 415;
+          y = 550;
+          width = 335;
+          height = 210;
+        } else {
+          const col = idx - 2;
+          x = col === 0 ? 50 : col === 1 ? 290 : 530;
+          y = 775;
+          width = 220;
+          height = 210;
+        }
+      } else {
+        const row = Math.floor(idx / 3);
+        const col = idx % 3;
+        x = col === 0 ? 50 : col === 1 ? 290 : 530;
+        y = 550 + (row * 175);
+        width = 220;
+        height = 160;
       }
+
       realignedContent.push({
         ...photo,
         x,
@@ -637,16 +667,15 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const updateElement = (elementId: string, updates: Partial<CanvasElement>) => {
-    if (!activeProject || !activePageId) return;
-    
-    // We update without pushing state for smooth dragging/resizing updates.
-    // If update calls from dragEnd or blur, pushState will be called.
+    if (!activeProject) return;
+
     setActiveProject(prev => {
       if (!prev) return null;
       return {
         ...prev,
         pages: prev.pages.map(page => {
-          if (page.id !== activePageId) return page;
+          const hasTarget = page.elements.some(el => el.id === elementId);
+          if (!hasTarget) return page;
           return {
             ...page,
             elements: page.elements.map(el => {
@@ -660,7 +689,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deleteElement = (elementId: string) => {
-    if (!activeProject || !activePageId) return;
+    if (!activeProject) return;
     pushState(activeProject.pages);
 
     setActiveProject(prev => {
@@ -668,7 +697,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return {
         ...prev,
         pages: prev.pages.map(page => {
-          if (page.id !== activePageId) return page;
+          const hasTarget = page.elements.some(el => el.id === elementId);
+          if (!hasTarget) return page;
           return {
             ...page,
             elements: page.elements.filter(el => el.id !== elementId)
@@ -683,29 +713,25 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const duplicateElement = (elementId: string) => {
-    if (!activeProject || !activePageId) return;
+    if (!activeProject) return;
     pushState(activeProject.pages);
 
+    let createdId = '';
     setActiveProject(prev => {
       if (!prev) return null;
       return {
         ...prev,
         pages: prev.pages.map(page => {
-          if (page.id !== activePageId) return page;
           const target = page.elements.find(el => el.id === elementId);
           if (!target) return page;
 
-          const newId = `${target.type}_${Date.now()}`;
+          createdId = `${target.type}_${Date.now()}`;
           const duplicate: CanvasElement = {
             ...target,
-            id: newId,
-            x: target.x + 20, // Offset
-            y: target.y + 20,
-            zIndex: page.elements.length + 1
-          } as CanvasElement;
-
-          // Set immediate timeout to select duplicate
-          setTimeout(() => setSelectedElementId(newId), 0);
+            id: createdId,
+            x: Math.min(activeProject.canvasWidth - target.width - 20, target.x + 20),
+            y: Math.min(activeProject.canvasHeight - target.height - 20, target.y + 20)
+          };
 
           return {
             ...page,
@@ -714,6 +740,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         })
       };
     });
+
   };
 
   // Adjust layer orders
