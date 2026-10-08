@@ -1072,60 +1072,80 @@ public class AiController {
         result.put("highlights", extractedHighlights);
         result.put("rawText", text);
 
-        // Synthesize publication-ready 8-9 line article (~120-160 words across 2 paragraphs)
-        String deptClause = !extractedClassName.isEmpty() ? extractedClassName : "DEPARTMENT OF INFORMATION TECHNOLOGY";
-        String dateClause = !extractedDate.isEmpty() ? " on " + extractedDate : "";
-        String venueClause = !extractedVenue.isEmpty() ? " at " + extractedVenue : "";
-        String teamClause = !extractedTeamName.isEmpty() ? " in collaboration with " + extractedTeamName + "," : "";
+        // Synthesize strictly grounded 5 to 6 line concise summary (~60-90 words max)
+        List<String> summaryLines = new ArrayList<>();
+        
+        // Line 1: Title & Department
+        String deptName = !extractedClassName.isEmpty() ? extractedClassName : "Department of Information Technology";
+        String teamStr = !extractedTeamName.isEmpty() ? " in collaboration with " + extractedTeamName : "";
+        summaryLines.add("The " + deptName + teamStr + " organized the event titled \"" + extractedTitle + "\".");
 
-        // Paragraph 1: Lead, Speaker, and Core Purpose (~3-4 lines)
-        StringBuilder p1 = new StringBuilder();
-        p1.append("The ").append(deptClause).append(", KPRCAS,").append(teamClause)
-          .append(" organized the flagship program titled \"").append(extractedTitle)
-          .append("\"").append(dateClause).append(venueClause).append(".");
+        // Line 2: Mandatory Date & Venue (if in report)
+        if (!extractedDate.isEmpty() || !extractedVenue.isEmpty()) {
+            List<String> sched = new ArrayList<>();
+            if (!extractedDate.isEmpty()) sched.add("Date: " + extractedDate);
+            if (!extractedVenue.isEmpty()) sched.add("Venue: " + extractedVenue);
+            summaryLines.add("Event Schedule: " + String.join(" | ", sched) + ".");
+        }
 
+        // Line 3: Mandatory Resource Person / Speaker / Presenter (if in report)
         if (!extractedPerson.isEmpty()) {
-            p1.append(" The occasion was graced by esteemed Chief Guest ").append(extractedPerson)
-              .append(", who delivered an inspiring address sharing key practical perspectives.");
-        }
-        if (!extractedPurpose.isEmpty()) {
-            String purpCore = extractedPurpose.split("(?<=[.!?])\\s+")[0];
-            p1.append(" ").append(purpCore);
+            summaryLines.add("Resource Person / Speaker: " + extractedPerson + ".");
         }
 
-        // Paragraph 2: Core Highlights, Technical Acumen & Closing (~4-5 lines)
-        StringBuilder p2 = new StringBuilder();
-        if (!extractedSummary.isEmpty()) {
+        // Line 4: Mandatory Purpose of the Event (if in report)
+        if (!extractedPurpose.isEmpty() && extractedPurpose.length() > 10) {
+            String cleanPurp = extractedPurpose.replaceAll("(?i)^(?:Purpose of the Event|Purpose|Objective\\(s\\)?|Objectives|Aim)[:\\s]*", "").trim();
+            String[] parts = cleanPurp.split("(?<=[.!?])\\s+");
+            if (parts.length > 0 && !parts[0].trim().isEmpty()) {
+                summaryLines.add("Purpose: " + parts[0].trim());
+            }
+        }
+
+        // Line 5 & 6: Extra Important Highlights & Outcomes strictly from report
+        if (!extractedSummary.isEmpty() && extractedSummary.length() > 15 && summaryLines.size() < 6) {
             String cleanSumm = extractedSummary
                 .replaceAll("(?i)^(?:1\\.\\s*Introduction|2\\.\\s*Summary|Events Conducted|Summary of the Event)[:\\s]*", "")
-                .replaceAll("(?i)\\bDepartment\\s*:\\s*[^\\.]+\\.", "")
-                .replaceAll("(?i)\\bVenue\\s*:\\s*[^\\.]+\\.", "")
-                .replaceAll("(?i)\\bDate\\s*:\\s*[^\\.]+\\.", "")
                 .trim();
             String[] sSentences = cleanSumm.split("(?<=[.!?])\\s+");
-            if (sSentences.length > 0 && sSentences[0].length() > 20) {
-                p2.append(sSentences[0]).append(" ");
-                if (sSentences.length > 1 && sSentences[1].length() > 20) {
-                    p2.append(sSentences[1]).append(" ");
+            for (String s : sSentences) {
+                String trimmed = s.trim();
+                if (trimmed.length() > 15 && summaryLines.size() < 6) {
+                    summaryLines.add("Highlights: " + trimmed);
+                    if (summaryLines.size() >= 6) break;
                 }
             }
         }
 
-        if (p2.length() == 0) {
-            p2.append("Participants engaged in intensive technical sessions and collaborative problem-solving tracks, demonstrating exemplary proficiency. ");
+        if (summaryLines.size() < 6 && !extractedOutcome.isEmpty() && extractedOutcome.length() > 15) {
+            String cleanOut = extractedOutcome.replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes)[:\\s]*", "").trim();
+            String[] outParts = cleanOut.split("(?<=[.!?])\\s+");
+            if (outParts.length > 0 && !outParts[0].trim().isEmpty()) {
+                summaryLines.add("Outcome: " + outParts[0].trim());
+            }
         }
 
-        if (!extractedOutcome.isEmpty()) {
-            String outCore = extractedOutcome.split("(?<=[.!?])\\s+")[0].replaceAll("(?i)^(?:Key Outcomes|Outcome)[:\\s]*", "").trim();
-            p2.append("The initiative enabled participants to ").append(outCore.toLowerCase().startsWith("to ") ? outCore.substring(3) : outCore).append(". ");
-        } else {
-            p2.append("The session enabled attendees to acquire practical domain competencies and valuable industry exposure. ");
+        // If still under 5 lines, pull clean sentences directly from raw text
+        if (summaryLines.size() < 5 && text != null && !text.isEmpty()) {
+            String[] rawSentences = text.split("(?<=[.!?])\\s+|[\\r\\n]+");
+            for (String rawS : rawSentences) {
+                String trimmed = rawS.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
+                if (trimmed.length() > 20 && trimmed.length() < 150 &&
+                    !summaryLines.contains(trimmed) &&
+                    !trimmed.toLowerCase().startsWith("page ") &&
+                    !trimmed.toLowerCase().startsWith("signature") &&
+                    !trimmed.toLowerCase().contains("version:")) {
+                    summaryLines.add(trimmed);
+                    if (summaryLines.size() >= 6) break;
+                }
+            }
         }
 
-        p2.append("The department faculty and leadership warmly congratulated all participants and coordinators for making ")
-          .append(extractedTitle).append(" a grand success.");
+        if (summaryLines.size() > 6) {
+            summaryLines = summaryLines.subList(0, 6);
+        }
 
-        String generatedFullArticle = cleanValue(p1.toString().trim() + "\n\n" + p2.toString().trim());
+        String generatedFullArticle = String.join("\n", summaryLines);
         result.put("article", generatedFullArticle);
 
         return ResponseEntity.ok(result);

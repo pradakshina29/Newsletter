@@ -620,6 +620,23 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
   };
 
   // PDF Export Engine (Multi-page canvas render scaling)
+  // Helper to convert any HTTP image URL to Data URL for 100% CORS-safe PDF capture
+  const ensureImageDataUrl = async (url: string): Promise<string> => {
+    if (!url || url.startsWith('data:')) return url;
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      const blob = await response.blob();
+      return await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string) || url);
+        reader.onerror = () => resolve(url);
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      return url;
+    }
+  };
+
   // PDF Export Engine (Unscaled 1:1 html2canvas capture with Google Fonts & #EFEFEF background)
   const handleExportPDF = async () => {
     setExporting(true);
@@ -633,17 +650,18 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         return;
       }
 
-      // Ensure Google Web Fonts are fully loaded into browser font cache
       await document.fonts.ready;
 
-      // Create a temporary hidden container element at scale 1:1 for crisp, distortion-free capture
+      // Hidden container element at 1:1 scale with low opacity for crisp, distortion-free capture
       const exportContainer = document.createElement('div');
-      exportContainer.style.position = 'fixed';
-      exportContainer.style.top = '-9999px';
-      exportContainer.style.left = '-9999px';
+      exportContainer.style.position = 'absolute';
+      exportContainer.style.top = '0';
+      exportContainer.style.left = '0';
       exportContainer.style.width = '800px';
       exportContainer.style.height = '1130px';
       exportContainer.style.backgroundColor = '#EFEFEF';
+      exportContainer.style.opacity = '0.01';
+      exportContainer.style.pointerEvents = 'none';
       exportContainer.style.zIndex = '-9999';
       document.body.appendChild(exportContainer);
 
@@ -668,11 +686,20 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         const page = ensureCanonicalPageStructure(rawPage, pageIdx + 1, activeProject.department || "Information Technology");
         const pageBgColor = (page.elements.find((el: any) => el.id?.endsWith('_bg') || el.id === 'bg') as any)?.fillColor || '#EFEFEF';
 
+        // Preload external images to base64 Data URLs so html2canvas never drops CORS images
+        const elementsWithDataUrls = await Promise.all((page.elements || []).map(async (el: any) => {
+          if (el.type === 'image' && el.url) {
+            const dataUrl = await ensureImageDataUrl(el.url);
+            return { ...el, url: dataUrl };
+          }
+          return el;
+        }));
+
         // Render page DOM unscaled with embedded Google Fonts
         exportContainer.innerHTML = `
           <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;600;700&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap">
           <div style="position: relative; width: 800px; height: 1130px; background-color: ${pageBgColor}; overflow: hidden; font-family: 'Poppins', sans-serif;">
-            ${(page.elements || []).map((el: any) => {
+            ${elementsWithDataUrls.map((el: any) => {
               if (el.type === 'shape') {
                 if (el.id?.includes('line_div') || el.id?.includes('diamond_div')) return '';
                 return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background-color: ${el.fillColor || '#000000'}; border-radius: ${el.borderRadius || 0}px; opacity: ${(el.opacity ?? 100) / 100}; transform: rotate(${el.rotation || 0}deg);"></div>`;
@@ -693,13 +720,12 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         `;
 
         await document.fonts.ready;
-        // Wait for images inside exportContainer to load fully
         const imgs = Array.from(exportContainer.querySelectorAll('img'));
         await Promise.all(imgs.map(img => new Promise(resolve => {
           if (img.complete) resolve(true);
           else { img.onload = () => resolve(true); img.onerror = () => resolve(true); }
         })));
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
 
         const canvasObj = await html2canvas(exportContainer, {
           scale: 2,
@@ -732,7 +758,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
     }
   };
 
-  // DOCX Export Engine with real embedded ImageRun objects
+  // DOCX Export Engine with real embedded ImageRun objects & structured layout
   const handleExportDOCX = async () => {
     if (!activeProject) return;
 
@@ -743,19 +769,34 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       await saveProject();
       const docChildren: any[] = [];
 
+      const deptTitle = (activeProject.department || "Information Technology").toUpperCase();
+
       docChildren.push(
         new Paragraph({
           children: [
             new TextRun({
-              text: `${(activeProject.department || "Information Technology").toUpperCase()} - OFFICIAL NEWSLETTER`,
+              text: `DEPARTMENT OF ${deptTitle}`,
               bold: true,
-              size: 28,
+              size: 24,
               font: "Arial",
               color: "1E40AF"
             })
           ],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 200 }
+          spacing: { after: 100 }
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "CTRL+READ • OFFICIAL NEWSLETTER",
+              bold: true,
+              size: 32,
+              font: "Playfair Display",
+              color: "0F172A"
+            })
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 250 }
         })
       );
 
@@ -818,10 +859,16 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                 }
                 imageData = bytes;
               } else {
-                const res = await fetch(el.url);
-                const blob = await res.blob();
-                const arrayBuffer = await blob.arrayBuffer();
-                imageData = new Uint8Array(arrayBuffer);
+                const dataUrl = await ensureImageDataUrl(el.url);
+                if (dataUrl.startsWith('data:image')) {
+                  const base64Str = dataUrl.split(',')[1];
+                  const binaryStr = atob(base64Str);
+                  const bytes = new Uint8Array(binaryStr.length);
+                  for (let b = 0; b < binaryStr.length; b++) {
+                    bytes[b] = binaryStr.charCodeAt(b);
+                  }
+                  imageData = bytes;
+                }
               }
 
               if (imageData) {
@@ -861,16 +908,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       }
 
       const doc = new DocxDocument({
-        sections: [
-          {
-            properties: {},
-            children: docChildren
-          }
-        ]
+        sections: [{
+          properties: {},
+          children: docChildren
+        }]
       });
 
-      const blob = await Packer.toBlob(doc);
-      const url = URL.createObjectURL(blob);
+      const buffer = await Packer.toBlob(doc);
+      const url = URL.createObjectURL(buffer);
       const a = document.createElement('a');
       a.href = url;
       a.download = `${activeProject.name.replace(/ /g, '_')}_KPRCAS.docx`;
@@ -878,10 +923,11 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      showSuccess("DOCX document exported successfully!", "Export Word");
-    } catch (err) {
-      console.error("DOCX Export failed", err);
-      showError("An error occurred during DOCX generation.", "Export Word Error");
+
+      showSuccess("DOCX export completed successfully!", "Export DOCX");
+    } catch (e) {
+      console.error("DOCX generation failure", e);
+      showError("Error exporting DOCX document.", "Export DOCX Error");
     } finally {
       setDocxGenerating(false);
     }

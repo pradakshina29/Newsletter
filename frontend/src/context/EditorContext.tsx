@@ -362,19 +362,22 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Push current page state to undo stack
   const pushState = useCallback((pagesToPush?: Page[]) => {
     if (!activeProject) return;
-    const stateObj = {
-      pages: pagesToPush || activeProject.pages,
-      theme: activeProject.theme,
-      canvasWidth: activeProject.canvasWidth,
-      canvasHeight: activeProject.canvasHeight
-    };
-    const serialized = JSON.stringify(stateObj);
-    setUndoStack(prev => {
-      // Avoid pushing identical state consecutively
-      if (prev.length > 0 && prev[prev.length - 1] === serialized) return prev;
-      return [...prev, serialized].slice(-30); // Max history size 30
-    });
-    setRedoStack([]);
+    try {
+      const stateObj = {
+        pages: pagesToPush || activeProject.pages,
+        theme: activeProject.theme,
+        canvasWidth: activeProject.canvasWidth,
+        canvasHeight: activeProject.canvasHeight
+      };
+      const serialized = JSON.stringify(stateObj);
+      setUndoStack(prev => {
+        if (prev.length > 0 && prev[prev.length - 1] === serialized) return prev;
+        return [...prev, serialized].slice(-10); // Max history size 10 to prevent memory bloat
+      });
+      setRedoStack([]);
+    } catch (e) {
+      console.warn("Could not push state snapshot:", e);
+    }
   }, [activeProject]);
 
   const loadProject = useCallback((project: ProjectData) => {
@@ -393,7 +396,9 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         localStorage.setItem(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
         localStorage.setItem(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      } catch (e) {
+        console.warn("localStorage quota exceeded or write skipped:", e);
+      }
     }
     if (normalizedProject.pages && normalizedProject.pages.length > 0) {
       setActivePageId(prev => {
@@ -403,12 +408,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     setUndoStack([]);
     setRedoStack([]);
-    prevContentRef.current = JSON.stringify({
-      name: normalizedProject.name,
-      pages: normalizedProject.pages,
-      theme: normalizedProject.theme,
-      department: normalizedProject.department
-    });
   }, []);
 
   // Save project back to server & local cache

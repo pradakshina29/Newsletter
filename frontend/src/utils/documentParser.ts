@@ -438,17 +438,23 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
                 if (imgKey) {
                   let imgObj: any = null;
                   try {
-                    if (page.objs && typeof (page.objs as any).get === 'function') {
-                      imgObj = await new Promise(resolve => {
+                    imgObj = await Promise.race([
+                      new Promise(resolve => {
                         try {
-                          const direct = (page.objs as any).get(imgKey, (obj: any) => resolve(obj));
-                          if (direct) resolve(direct);
+                          if (page.objs && typeof (page.objs as any).get === 'function') {
+                            const direct = (page.objs as any).get(imgKey, (obj: any) => resolve(obj));
+                            if (direct) resolve(direct);
+                          } else {
+                            resolve(null);
+                          }
                         } catch (_) {
                           resolve(null);
                         }
-                      });
-                    }
-                    if (!imgObj && (pdfDoc as any).commonObjs) {
+                      }),
+                      new Promise(resolve => setTimeout(() => resolve(null), 400))
+                    ]);
+
+                    if (!imgObj && (pdfDoc as any).commonObjs && typeof (pdfDoc as any).commonObjs.get === 'function') {
                       imgObj = (pdfDoc as any).commonObjs.get(imgKey);
                     }
                   } catch (_) {}
@@ -458,7 +464,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
                     const h = imgObj.height;
                     const aspect = w / h;
 
-                    if (w >= 120 && h >= 90 && aspect >= 0.35 && aspect <= 4.0) {
+                    if (w >= 100 && h >= 80 && aspect >= 0.35 && aspect <= 3.5) {
                       const canvas = document.createElement('canvas');
                       canvas.width = w;
                       canvas.height = h;
@@ -492,11 +498,15 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
                           }
                           ctx.putImageData(imgData, 0, 0);
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
-                          extractedImages.push(dataUrl);
+                          if (!extractedImages.includes(dataUrl)) {
+                            extractedImages.push(dataUrl);
+                          }
                         } else if (typeof ctx.drawImage === 'function') {
                           ctx.drawImage(imgObj, 0, 0);
                           const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
-                          extractedImages.push(dataUrl);
+                          if (!extractedImages.includes(dataUrl)) {
+                            extractedImages.push(dataUrl);
+                          }
                         }
                       }
                     }
@@ -562,7 +572,8 @@ export async function extractTextFromDocument(file: File): Promise<string> {
 export function parseReportEntities(
   rawText: string,
   fileName: string,
-  defaultDepartment: string = "Information Technology"
+  defaultDepartment: string = "Information Technology",
+  inputImages: string[] = []
 ): ParsedReportData {
   const cleanFileName = fileName.replace(/\.[^/.]+$/, "").replace(/[_\-+]/g, ' ').trim();
   
@@ -862,13 +873,6 @@ export function parseReportEntities(
     }
   }
 
-  let participantInfo = "";
-  const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Total Participants|Attendance)[:\s]+(\d+)/i) ||
-                    sanitizedText.match(/(?:over|more than|around)\s+(\d+)\s+(?:students|participants|delegates)/i);
-  if (partMatch && partMatch[1]) {
-    participantInfo = `with active participation from over ${partMatch[1]} students`;
-  }
-
   // 10. Extract Genuine Document Content Sections in FULL
   let purpose = "";
   const purposeMatch = sanitizedText.match(/(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim of the Event|Abstract|Background|Context|Theme & Concept)\s*[:\s]+\s*([\s\S]*?)(?=(?:Summary of the Event|Summary|Proceedings|Events Conducted|Competitions|Outcome of the Event|Outcome|Target Audience|Venue|Date|HOD|Dean|Principal|Signature|$))/i);
@@ -888,6 +892,12 @@ export function parseReportEntities(
     outcome = outcomeMatch[1].replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   }
 
+  const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Total Participants|Attendance)[:\s]+(\d+)/i) ||
+                    sanitizedText.match(/(?:over|more than|around)\s+(\d+)\s+(?:students|participants|delegates)/i);
+  if (partMatch && partMatch[1] && !outcome) {
+    outcome = `Over ${partMatch[1]} students participated in the program.`;
+  }
+
   // Collect notable student achievers mentioned in the text
   const studentNames: string[] = [];
   const studentMatches = sanitizedText.match(/(?:Mr\.|Ms\.)?\s+(?:Thirunageshwaran|Tarun Kumar|Vikas|Sudhakaran|Sahana|Sandya|Sowbharnica|Rakshita|Vaishnavi|Gowsika|Mahant|Ragul|Poojana|Shankavi|Suruthika|Tharunika|Vivinkumar|Arichandran|Rahul|Sathish|Yokesh|Pradakshina|Prakash|Pradeepa|Prada|Diksha|Vivin Kumar|Kanika|Praneeth|Sudharsan|Priya|Arun|Harini|Kavin|Deepak|Sneha|Sanjay|Divya|Ananya|Vignesh|Swetha|Keerthana|Surya|Naveen|Gokul|Pavithra|Manoj)(?:\s+[A-Z]\.?|\s+[A-Z][a-z]+)*/g);
@@ -904,84 +914,81 @@ export function parseReportEntities(
   const details = summary || purpose || sanitizedText.substring(0, 300);
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Professional Half-Page Journalistic Narrative Synthesis (~90-130 words, 6-9 lines of rich prose)
-  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT OF') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-  const dateClause = date ? ` on ${date}` : '';
-  const venueClause = venue ? ` at ${venue}` : '';
-  const teamClause = teamName ? `, in collaboration with ${teamName},` : '';
+  // 11. Strictly Grounded 5 to 6 Line Concise Summary (~60-90 words max)
+  // Contains mandatory fields (Title, Date, Resource Person, Purpose) and extra important details strictly from uploaded file
+  const lines: string[] = [];
 
-  let narrative = "";
+  // Line 1: Title & Department
+  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
+  const teamClause = teamName && teamName !== categoryTag ? `, in collaboration with ${teamName},` : '';
+  lines.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}".`);
 
-  if (categoryTag === "STUDENT’S ACHIEVEMENTS") {
-    if (studentNames.length > 0) {
-      const achieversList = studentNames.slice(0, 4).join(', ');
-      narrative = `${achieversList} from ${classDept || 'B.Sc. IT'} achieved remarkable distinction in the academic initiative titled "${title}"${dateClause}${venueClause}. `;
-    } else {
-      narrative = `The ${deptDisplayName}, School of Computing Science, proudly organized the distinguished initiative titled "${title}"${dateClause}${venueClause}. `;
-    }
-
-    if (summary && summary.length > 20) {
-      const cleanSummary = summary
-        .replace(/^(?:1\.\s*Introduction|2\.\s*Summary|Events Conducted|Summary of the Event)[:\s]*/i, '')
-        .replace(/\bDepartment\s*:\s*[^\.]+\./gi, '')
-        .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
-        .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
-        .trim();
-      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
-    } else {
-      narrative += `Demonstrating exceptional technical acumen, disciplined collaboration, and problem-solving excellence, the participants delivered commendable presentations and prototypes. `;
-    }
-
-    if (student) {
-      narrative += `The session was graced by ${student}, who commended the participants on their exemplary domain knowledge and practical execution. `;
-    }
-
-    narrative += `The Management, Principal Dr. P. Geetha, and faculty members warmly congratulate all achievers on their commendable milestone.`;
-
-  } else if (categoryTag === "FACULTY ACHIEVEMENT") {
-    const authorStr = student || "Faculty members from the Department of Information Technology";
-    narrative = `${authorStr} published an impactful research paper titled "${title}"${dateClause}. `;
-    
-    if (summary && summary.length > 20) {
-      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
-    } else {
-      narrative += `The scholarly research presents innovative computational frameworks and algorithmic methodologies, undergoing rigorous peer review in an esteemed international journal. `;
-    }
-
-    narrative += `This landmark research achievement underscores the department's strong commitment to scientific excellence and intellectual contribution.`;
-
-  } else if (categoryTag === "STUDENT PARTICIPATION" || categoryTag === "EXTENSION ACTIVITY") {
-    narrative = `The ${deptDisplayName}, School of Computing Science${teamClause} organized the initiative titled "${title}"${dateClause}${venueClause}${participantInfo ? ` with ${participantInfo}` : ''}. `;
-    
-    if (summary && summary.length > 20) {
-      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
-    } else {
-      narrative += `The initiative aimed to cultivate active social responsibility, practical hands-on exposure, and holistic learning among students. Participating delegates actively engaged in interactive sessions and collaborative field activities. `;
-    }
-
-    narrative += `The department faculty and organizers commended all student participants for making the initiative a resounding success.`;
-
-  } else {
-    // Standard DEPARTMENT EVENTS (Workshops, Seminars, Association Inauguration)
-    narrative = `The ${deptDisplayName}, School of Computing Science${teamClause} organized the academic program titled "${title}"${dateClause}${venueClause}. `;
-    
-    if (student) {
-      narrative += `The session was led by esteemed resource person ${student}, who delivered an insightful address providing students with valuable practical perspectives and modern industry exposure. `;
-    }
-
-    if (summary && summary.length > 20) {
-      const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
-    } else if (purpose && purpose.length > 20) {
-      narrative += `${purpose} `;
-    }
-
-    narrative += `The interactive format enabled attendees to acquire practical domain competencies, fostering academic growth and professional readiness.`;
+  // Line 2: Mandatory Date & Venue (if present in report)
+  if (date || venue) {
+    const scheduleParts = [];
+    if (date) scheduleParts.push(`Date: ${date}`);
+    if (venue) scheduleParts.push(`Venue: ${venue}`);
+    lines.push(`Event Schedule: ${scheduleParts.join(' | ')}.`);
   }
 
-  const article = deduplicateSentences(narrative.trim());
+  // Line 3: Mandatory Resource Person / Speaker / Presenter (if present in report)
+  if (student) {
+    lines.push(`Resource Person / Speaker: ${student}.`);
+  }
+
+  // Line 4: Mandatory Purpose of the Event (if present in report)
+  if (purpose && purpose.length > 10) {
+    const cleanPurp = purpose.replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\s]*/i, '').trim();
+    const firstPurpSentence = cleanPurp.split(/(?<=[.!?])\s+/)[0];
+    if (firstPurpSentence && firstPurpSentence.length > 10) {
+      lines.push(`Purpose: ${firstPurpSentence}`);
+    }
+  }
+
+  // Line 5 & 6: Extra Important Highlights & Outcomes strictly from the report text
+  if (summary && summary.length > 15 && lines.length < 6) {
+    const cleanSumm = summary
+      .replace(/^(?:1\.\s*Introduction|2\.\s*Summary|Events Conducted|Summary of the Event)[:\s]*/i, '')
+      .replace(/\bDepartment\s*:\s*[^\.]+\./gi, '')
+      .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
+      .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
+      .trim();
+    const summSentences = cleanSumm.split(/(?<=[.!?])\s+/);
+    for (const s of summSentences) {
+      const trimmed = s.trim();
+      if (trimmed.length > 15 && lines.length < 6) {
+        lines.push(`Highlights: ${trimmed}`);
+        if (lines.length >= 6) break;
+      }
+    }
+  }
+
+  if (lines.length < 6 && outcome && outcome.length > 15) {
+    const cleanOut = outcome.replace(/^(?:Outcome of the Event|Outcome|Key Outcomes)[:\s]*/i, '').trim();
+    const outSentence = cleanOut.split(/(?<=[.!?])\s+/)[0];
+    if (outSentence && outSentence.length > 10) {
+      lines.push(`Outcome: ${outSentence}`);
+    }
+  }
+
+  // If still less than 5 lines, extract key clean lines directly from rawText
+  if (lines.length < 5 && sanitizedText) {
+    const rawSentences = sanitizedText.split(/(?<=[.!?])\s+|\n+/);
+    for (const rawS of rawSentences) {
+      const trimmed = rawS.replace(/^[•\-\*\d+\.]\s*/, '').trim();
+      if (trimmed.length > 20 && trimmed.length < 150 &&
+          !isBinaryOrXmlJunk(trimmed) &&
+          !lines.some(l => l.toLowerCase().includes(trimmed.toLowerCase().substring(0, 15))) &&
+          !trimmed.toLowerCase().startsWith("page ") &&
+          !trimmed.toLowerCase().startsWith("signature") &&
+          !trimmed.toLowerCase().includes("version:")) {
+        lines.push(trimmed);
+        if (lines.length >= 6) break;
+      }
+    }
+  }
+
+  const article = deduplicateSentences(lines.slice(0, 6).join('\n'));
 
   return {
     category,
@@ -1001,6 +1008,6 @@ export function parseReportEntities(
     keywords: keywords.trim(),
     article,
     rawText: sanitizedText,
-    images: []
+    images: inputImages && inputImages.length > 0 ? inputImages : []
   };
 }

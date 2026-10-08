@@ -60,7 +60,7 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
       // Robust extraction for PDF, DOCX, and TXT
       const extracted = await extractDocumentContent(file);
       const dept = activeProject.department || "Information Technology";
-      const parsedData = parseReportEntities(extracted.text, file.name, dept);
+      const parsedData = parseReportEntities(extracted.text, file.name, dept, extracted.images);
 
       const parsedBlocks: ExtractedBlock[] = [];
 
