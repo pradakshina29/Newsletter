@@ -220,23 +220,6 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     currentY += 26;
   }
 
-  // Subtle separator line
-  realignedContent.push({
-    id: `p${pNum}_meta_line`,
-    type: "shape",
-    shapeType: "rect",
-    x: 180,
-    y: currentY + 2,
-    width: 440,
-    height: 1,
-    fillColor: "#CBD5E1",
-    strokeColor: "transparent",
-    strokeWidth: 0,
-    opacity: 80,
-    rotation: 0
-  });
-  currentY += 12;
-
   if (bodyEl) {
     const hasPhotos = photoEls.length > 0;
     const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
@@ -276,52 +259,57 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
     const totalP = uniquePhotos.length;
     uniquePhotos.forEach((photo, idx) => {
-      let x = 50;
-      let y = 550;
+      // PRESERVE CUSTOM USER DRAGGED POSITIONS
+      const userX = (photo as any).x;
+      const userY = (photo as any).y;
+      const isMoved = (photo as any).userMoved;
+
+      let defaultX = 50;
+      let defaultY = 550;
       let width = 700;
       let height = 325;
 
       if (totalP === 1) {
-        x = 100; y = 550; width = 600; height = 325;
+        defaultX = 100; defaultY = 550; width = 600; height = 325;
       } else if (totalP === 2) {
-        x = idx === 0 ? 50 : 415; y = 550; width = 335; height = 325;
+        defaultX = idx === 0 ? 50 : 415; defaultY = 550; width = 335; height = 325;
       } else if (totalP === 3) {
-        x = idx === 0 ? 50 : idx === 1 ? 290 : 530; y = 550; width = 220; height = 325;
+        defaultX = idx === 0 ? 50 : idx === 1 ? 290 : 530; defaultY = 550; width = 220; height = 325;
       } else if (totalP === 4) {
         const row = Math.floor(idx / 2);
         const col = idx % 2;
-        x = col === 0 ? 50 : 415;
-        y = row === 0 ? 550 : 775;
+        defaultX = col === 0 ? 50 : 415;
+        defaultY = row === 0 ? 550 : 775;
         width = 335;
         height = 210;
       } else if (totalP === 5) {
         if (idx < 2) {
-          x = idx === 0 ? 50 : 415;
-          y = 550;
+          defaultX = idx === 0 ? 50 : 415;
+          defaultY = 550;
           width = 335;
           height = 210;
         } else {
           const col = idx - 2;
-          x = col === 0 ? 50 : col === 1 ? 290 : 530;
-          y = 775;
+          defaultX = col === 0 ? 50 : col === 1 ? 290 : 530;
+          defaultY = 775;
           width = 220;
           height = 210;
         }
       } else {
         const row = Math.floor(idx / 3);
         const col = idx % 3;
-        x = col === 0 ? 50 : col === 1 ? 290 : 530;
-        y = 550 + (row * 175);
+        defaultX = col === 0 ? 50 : col === 1 ? 290 : 530;
+        defaultY = 550 + (row * 175);
         width = 220;
         height = 160;
       }
 
       realignedContent.push({
         ...photo,
-        x,
-        y,
-        width,
-        height,
+        x: isMoved ? userX : defaultX,
+        y: isMoved ? userY : defaultY,
+        width: (photo as any).width || width,
+        height: (photo as any).height || height,
         borderRadius: 10,
         shadow: 'md'
       } as any);

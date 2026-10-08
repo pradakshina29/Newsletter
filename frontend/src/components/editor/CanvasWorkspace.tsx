@@ -438,7 +438,7 @@ const CanvasWorkspace: React.FC<{
 
         const finalY = isHeaderEl ? snappedY : Math.max(220, snappedY);
 
-        updateElement(element.id, { x: snappedX, y: finalY });
+        updateElement(element.id, { x: snappedX, y: finalY, userMoved: true } as any);
         setGuides(lineX, lineY);
       } 
       
