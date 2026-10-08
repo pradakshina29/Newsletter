@@ -1455,99 +1455,83 @@ const ContentWizardPanel: React.FC = () => {
       });
 
       // 4. Photos Gallery (Placed in the lower half at y: 535)
-      const validPhotos = (reportConfirmData.photos || []).slice(0, 4);
-      if (validPhotos.length === 1) {
+      const validPhotos = reportConfirmData.photos || [];
+      const totalP = validPhotos.length;
+      if (totalP === 1) {
         contentElements.push({
           id: `p${targetPageNum}_img_1`,
           type: 'image',
           x: 100,
           y: 535,
           width: 600,
-          height: 480,
+          height: 325,
           url: validPhotos[0],
           borderRadius: 8,
           shadow: 'md',
           rotation: 0,
           opacity: 100
         });
-      } else if (validPhotos.length === 2) {
+      } else if (totalP === 2) {
         contentElements.push(
-          {
-            id: `p${targetPageNum}_img_1`,
-            type: 'image',
-            x: 55,
-            y: 535,
-            width: 335,
-            height: 480,
-            url: validPhotos[0],
-            borderRadius: 8,
-            shadow: 'md',
-            rotation: 0,
-            opacity: 100
-          },
-          {
-            id: `p${targetPageNum}_img_2`,
-            type: 'image',
-            x: 410,
-            y: 535,
-            width: 335,
-            height: 480,
-            url: validPhotos[1],
-            borderRadius: 8,
-            shadow: 'md',
-            rotation: 0,
-            opacity: 100
+          { id: `p${targetPageNum}_img_1`, type: 'image', x: 55, y: 535, width: 335, height: 325, url: validPhotos[0], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_2`, type: 'image', x: 410, y: 535, width: 335, height: 325, url: validPhotos[1], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 }
+        );
+      } else if (totalP === 3) {
+        contentElements.push(
+          { id: `p${targetPageNum}_img_1`, type: 'image', x: 55, y: 535, width: 220, height: 325, url: validPhotos[0], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_2`, type: 'image', x: 290, y: 535, width: 220, height: 325, url: validPhotos[1], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
+          { id: `p${targetPageNum}_img_3`, type: 'image', x: 530, y: 535, width: 220, height: 325, url: validPhotos[2], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 }
+        );
+      } else if (totalP > 3) {
+        validPhotos.forEach((photoUrl, idx) => {
+          let x = 55;
+          let y = 535;
+          let width = 335;
+          let height = 210;
+
+          if (totalP === 4) {
+            const row = Math.floor(idx / 2);
+            const col = idx % 2;
+            x = col === 0 ? 55 : 410;
+            y = row === 0 ? 535 : 760;
+            width = 335;
+            height = 210;
+          } else if (totalP === 5) {
+            if (idx < 2) {
+              x = idx === 0 ? 55 : 410;
+              y = 535;
+              width = 335;
+              height = 210;
+            } else {
+              const col = idx - 2;
+              x = col === 0 ? 55 : col === 1 ? 290 : 530;
+              y = 760;
+              width = 220;
+              height = 210;
+            }
+          } else {
+            const row = Math.floor(idx / 3);
+            const col = idx % 3;
+            x = col === 0 ? 55 : col === 1 ? 290 : 530;
+            y = 535 + (row * 175);
+            width = 220;
+            height = 160;
           }
-        );
-      } else if (validPhotos.length === 3) {
-        contentElements.push(
-          {
-            id: `p${targetPageNum}_img_1`,
+
+          contentElements.push({
+            id: `p${targetPageNum}_img_${idx + 1}`,
             type: 'image',
-            x: 55,
-            y: 535,
-            width: 690,
-            height: 235,
-            url: validPhotos[0],
+            x,
+            y,
+            width,
+            height,
+            url: photoUrl,
             borderRadius: 8,
             shadow: 'md',
             rotation: 0,
             opacity: 100
-          },
-          {
-            id: `p${targetPageNum}_img_2`,
-            type: 'image',
-            x: 55,
-            y: 785,
-            width: 335,
-            height: 235,
-            url: validPhotos[1],
-            borderRadius: 8,
-            shadow: 'md',
-            rotation: 0,
-            opacity: 100
-          },
-          {
-            id: `p${targetPageNum}_img_3`,
-            type: 'image',
-            x: 410,
-            y: 785,
-            width: 335,
-            height: 235,
-            url: validPhotos[2],
-            borderRadius: 8,
-            shadow: 'md',
-            rotation: 0,
-            opacity: 100
-          }
-        );
-      } else if (validPhotos.length >= 4) {
-        contentElements.push(
-          { id: `p${targetPageNum}_img_1`, type: 'image', x: 55, y: 535, width: 335, height: 235, url: validPhotos[0], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
-          { id: `p${targetPageNum}_img_2`, type: 'image', x: 410, y: 535, width: 335, height: 235, url: validPhotos[1], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
-          { id: `p${targetPageNum}_img_3`, type: 'image', x: 55, y: 785, width: 335, height: 235, url: validPhotos[2], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 },
-          { id: `p${targetPageNum}_img_4`, type: 'image', x: 410, y: 785, width: 335, height: 235, url: validPhotos[3], borderRadius: 8, shadow: 'md', rotation: 0, opacity: 100 }
-        );
+          });
+        });
       }
 
       const updatedElements = [

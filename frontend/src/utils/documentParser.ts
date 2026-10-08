@@ -66,7 +66,9 @@ export function isBinaryOrXmlJunk(str: string): boolean {
 export function cleanAndSanitizeReportText(rawText: string): string {
   if (!rawText) return '';
 
-  return rawText
+  const decoded = decodeXmlEntities(rawText);
+
+  return decoded
     .replace(/\r\n/g, '\n')
     // 1. Strip raw binary / ZIP / XML metadata
     .replace(/PK[\x00-\x1F\x7F-\xFF]+\[Content_Types\][\s\S]*/gi, '')
@@ -81,20 +83,19 @@ export function cleanAndSanitizeReportText(rawText: string): string {
     .replace(/[\u25A0-\u25FF\u2500-\u257F]/g, ' ')
     // 4. Strip bullet symbols and messy punctuation markers while preserving standard word hyphens
     .replace(/[•●○◦▪▫~|]+/g, ' ')
-    // 5. Clean common institutional boilerplate lines
+    // 5. Clean common institutional boilerplate tags
     .replace(/KPRCAS\/IQAC\/[^\n]*/gi, '')
-    .replace(/VERSION:\s*\d+[^\n]*/gi, '')
-    .replace(/Quality System Document[^\n]*/gi, '')
-    .replace(/Report of the Event[^\n]*/gi, '')
-    .replace(/Event Report[^\n]*/gi, '')
-    .replace(/Activity Report[^\n]*/gi, '')
-    .replace(/KPR College of Arts Science and Research[^\n]*/gi, '')
+    .replace(/VERSION:\s*\d+/gi, '')
+    .replace(/Quality System Document/gi, '')
+    .replace(/KPR College of Arts Science and Research/gi, '')
     .replace(/\(Affiliated to Bharathiar University[^\)]*\)/gi, '')
     .replace(/Avinashi Road, Arasur[^\n]*/gi, '')
     .replace(/Page \d+ of \d+/gi, '')
-    .replace(/Signature of the (?:Coordinator|HOD|Dean|Principal|Faculty)[^\n]*/gi, '')
+    .replace(/Signature of the (?:Coordinator|HOD|Dean|Principal|Faculty)/gi, '')
     .replace(/Prepared by[\s\S]*?Approved by/gi, '')
-    // 6. Normalize whitespace
+    // 6. Strip duplicated consecutive words like "with with", "in in", "the the"
+    .replace(/\b(with|in|the|of|on|at|and|to|for|a|an|by|is|was|were|has|have|had)\s+\1\b/gi, '$1')
+    // 7. Normalize whitespace
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n\n')
     .trim();
@@ -300,7 +301,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
 
         mediaList.sort((a, b) => b.size - a.size);
 
-        for (const item of mediaList.slice(0, 4)) {
+        for (const item of mediaList) {
           const ext = item.path.split('.').pop()?.toLowerCase() || 'jpeg';
           const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
           extractedImages.push(`data:${mimeType};base64,${item.base64}`);
@@ -333,7 +334,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         if (fullText.trim().length > 10) {
           return {
             text: cleanAndSanitizeReportText(fullText),
-            images: extractedImages.slice(0, 4)
+            images: extractedImages
           };
         }
       } catch (docxErr) {
@@ -507,7 +508,7 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         if (fullText.trim().length > 10) {
           return {
             text: cleanAndSanitizeReportText(fullText),
-            images: extractedImages.slice(0, 4)
+            images: extractedImages
           };
         }
       } catch (pdfErr) {
@@ -915,8 +916,7 @@ export function parseReportEntities(
         .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
         .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
         .trim();
-      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
     } else {
       narrative += `Demonstrating exceptional technical acumen, disciplined collaboration, and problem-solving excellence, the participants delivered commendable presentations and prototypes. `;
     }
@@ -933,8 +933,7 @@ export function parseReportEntities(
     
     if (summary && summary.length > 20) {
       const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
     } else {
       narrative += `The scholarly research presents innovative computational frameworks and algorithmic methodologies, undergoing rigorous peer review in an esteemed international journal. `;
     }
@@ -946,8 +945,7 @@ export function parseReportEntities(
     
     if (summary && summary.length > 20) {
       const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
     } else {
       narrative += `The initiative aimed to cultivate active social responsibility, practical hands-on exposure, and holistic learning among students. Participating delegates actively engaged in interactive sessions and collaborative field activities. `;
     }
@@ -964,10 +962,9 @@ export function parseReportEntities(
 
     if (summary && summary.length > 20) {
       const cleanSummary = summary.replace(/^(?:1\.\s*Introduction|2\.\s*Summary)[:\s]*/i, '').trim();
-      const firstTwo = cleanSummary.split(/(?<=[.!?])\s+/).slice(0, 2).join(' ');
-      if (firstTwo.length > 20) narrative += `${firstTwo} `;
+      if (cleanSummary.length > 20) narrative += `${cleanSummary} `;
     } else if (purpose && purpose.length > 20) {
-      narrative += `${purpose.split(/(?<=[.!?])\s+/)[0]} `;
+      narrative += `${purpose} `;
     }
 
     narrative += `The interactive format enabled attendees to acquire practical domain competencies, fostering academic growth and professional readiness.`;
@@ -988,8 +985,8 @@ export function parseReportEntities(
     outcome,
     award,
     host,
-    details: details.substring(0, 350),
-    keywords: keywords.substring(0, 250),
+    details: details.trim(),
+    keywords: keywords.trim(),
     article,
     rawText: sanitizedText,
     images: []
