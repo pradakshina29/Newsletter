@@ -609,23 +609,7 @@ const ContentWizardPanel: React.FC = () => {
       currentY += subHeight + 4;
     }
 
-    // Subtle divider line
-    contentElements.push({
-      id: `p${pageNum}_meta_line`,
-      type: 'shape',
-      shapeType: 'rect',
-      x: 180,
-      y: currentY + 2,
-      width: 440,
-      height: 1,
-      fillColor: '#CBD5E1',
-      strokeColor: 'transparent',
-      strokeWidth: 0,
-      opacity: 80,
-      rotation: 0
-    });
-
-    currentY += 10;
+    currentY += 4;
 
     // Body narrative paragraph
     const validPhotos = photos || [];

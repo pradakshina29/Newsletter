@@ -95,7 +95,11 @@ export function cleanAndSanitizeReportText(rawText: string): string {
     .replace(/Prepared by[\s\S]*?Approved by/gi, '')
     // 6. Strip duplicated consecutive words like "with with", "in in", "the the"
     .replace(/\b(with|in|the|of|on|at|and|to|for|a|an|by|is|was|were|has|have|had)\s+\1\b/gi, '$1')
-    // 7. Normalize whitespace
+    // 7. Strip incomplete dangling honorific clauses like "presided over by Dr." or lone "Dr." without a name
+    .replace(/\b(?:presided over by|felicitated by|graced by|addressed by)\s+Dr\.\s*(?=[.\n\s]|$)/gi, '')
+    .replace(/\bDr\.\s*(?=[.\n\s]|$)/gi, '')
+    .replace(/\bre\s+sounding\b/gi, 'resounding')
+    // 8. Normalize whitespace
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n\n')
     .trim();

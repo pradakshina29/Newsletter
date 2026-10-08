@@ -94,7 +94,8 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     return !(
       id === `p${pNum}_bg` || id.endsWith('_bg') ||
       id.includes('dept_hdr') || id.includes('date_hdr') ||
-      id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text')
+      id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text') ||
+      id.includes('meta_line')
     );
   });
 
@@ -131,6 +132,7 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   });
 
   if (titleEl) {
+    const isMoved = (titleEl as any).userMoved;
     const textStr = (titleEl as any).text || '';
     const titleHeight = textStr.length > 55 ? 46 : 28;
     const defaultFontSize = textStr.length > 70 ? 15.5 : textStr.length > 50 ? 16.5 : 18;
@@ -139,8 +141,8 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
     realignedContent.push({
       ...titleEl,
-      x: (titleEl as any).x !== undefined ? (titleEl as any).x : 50,
-      y: currentY,
+      x: isMoved ? (titleEl as any).x : ((titleEl as any).x !== undefined ? (titleEl as any).x : 50),
+      y: isMoved ? (titleEl as any).y : currentY,
       width: (titleEl as any).width || 700,
       height: (titleEl as any).height || titleHeight,
       fontSize: finalFontSize,
@@ -153,10 +155,11 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       lineHeight: (titleEl as any).lineHeight || 1.25,
       letterSpacing: (titleEl as any).letterSpacing !== undefined ? (titleEl as any).letterSpacing : 0
     } as any);
-    currentY += ((titleEl as any).height || titleHeight) + 8;
+    if (!isMoved) currentY += ((titleEl as any).height || titleHeight) + 8;
   }
 
   if (subEl) {
+    const isMoved = (subEl as any).userMoved;
     const textStr = (subEl as any).text || '';
     const subHeight = textStr.length > 85 ? 32 : 20;
     const defaultSubFontSize = textStr.length > 85 ? 10 : 10.5;
@@ -165,8 +168,8 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
     realignedContent.push({
       ...subEl,
-      x: (subEl as any).x !== undefined ? (subEl as any).x : 50,
-      y: currentY,
+      x: isMoved ? (subEl as any).x : ((subEl as any).x !== undefined ? (subEl as any).x : 50),
+      y: isMoved ? (subEl as any).y : currentY,
       width: (subEl as any).width || 700,
       height: (subEl as any).height || subHeight,
       fontSize: finalSubFontSize,
@@ -179,17 +182,18 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       lineHeight: (subEl as any).lineHeight || 1.35,
       letterSpacing: (subEl as any).letterSpacing !== undefined ? (subEl as any).letterSpacing : 0
     } as any);
-    currentY += ((subEl as any).height || subHeight) + 6;
+    if (!isMoved) currentY += ((subEl as any).height || subHeight) + 6;
   }
 
   if (hostEl) {
+    const isMoved = (hostEl as any).userMoved;
     const userHostFontSize = (hostEl as any).fontSize;
     const finalHostFontSize = (userHostFontSize !== undefined && !isNaN(Number(userHostFontSize))) ? Number(userHostFontSize) : 9.5;
 
     realignedContent.push({
       ...hostEl,
-      x: (hostEl as any).x !== undefined ? (hostEl as any).x : 50,
-      y: currentY,
+      x: isMoved ? (hostEl as any).x : ((hostEl as any).x !== undefined ? (hostEl as any).x : 50),
+      y: isMoved ? (hostEl as any).y : currentY,
       width: (hostEl as any).width || 700,
       height: (hostEl as any).height || 18,
       fontSize: finalHostFontSize,
@@ -201,14 +205,15 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       fontFamily: (hostEl as any).fontFamily || 'Poppins',
       lineHeight: (hostEl as any).lineHeight || 1.4
     } as any);
-    currentY += 22;
+    if (!isMoved) currentY += 22;
   }
 
   if (categoryTagEl) {
+    const isMoved = (categoryTagEl as any).userMoved;
     realignedContent.push({
       ...categoryTagEl,
-      x: (categoryTagEl as any).x !== undefined ? (categoryTagEl as any).x : 50,
-      y: currentY,
+      x: isMoved ? (categoryTagEl as any).x : ((categoryTagEl as any).x !== undefined ? (categoryTagEl as any).x : 50),
+      y: isMoved ? (categoryTagEl as any).y : currentY,
       width: (categoryTagEl as any).width || 700,
       height: (categoryTagEl as any).height || 22,
       fontSize: (categoryTagEl as any).fontSize || 12,
@@ -217,10 +222,11 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       color: (categoryTagEl as any).color || '#0F172A',
       fontFamily: (categoryTagEl as any).fontFamily || 'Poppins'
     } as any);
-    currentY += 26;
+    if (!isMoved) currentY += 26;
   }
 
   if (bodyEl) {
+    const isMoved = (bodyEl as any).userMoved;
     const hasPhotos = photoEls.length > 0;
     const bodyHeight = hasPhotos ? Math.max(160, 535 - currentY) : (1060 - currentY);
     const textLen = ((bodyEl as any).text || '').length;
@@ -230,8 +236,8 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
     realignedContent.push({
       ...bodyEl,
-      x: (bodyEl as any).x !== undefined ? (bodyEl as any).x : 50,
-      y: currentY,
+      x: isMoved ? (bodyEl as any).x : ((bodyEl as any).x !== undefined ? (bodyEl as any).x : 50),
+      y: isMoved ? (bodyEl as any).y : currentY,
       width: (bodyEl as any).width || 700,
       height: (bodyEl as any).height || bodyHeight,
       fontSize: finalBodyFontSize,
