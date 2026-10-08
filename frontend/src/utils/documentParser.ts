@@ -365,11 +365,11 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
     }
   }
 
-  // 3. PDF File Extraction using pdfjs-dist
+  // 3. PDF File Extraction using pdfjs-dist with raw ArrayBuffer fallback
   if (isPdf || fileName.endsWith('.pdf') || file.type === 'application/pdf') {
     if (arrayBuffer) {
       try {
-        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+        const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer, verbosity: 0 });
         const pdfDoc = await loadingTask.promise;
         const numPages = pdfDoc.numPages;
         const textChunks: string[] = [];
@@ -520,14 +520,27 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         }
 
         const fullText = textChunks.join('\n\n');
-        if (fullText.trim().length > 10) {
+        if (fullText.trim().length > 15) {
           return {
             text: cleanAndSanitizeReportText(fullText),
             images: extractedImages
           };
         }
       } catch (pdfErr) {
-        console.warn("pdfjs extraction failed:", pdfErr);
+        console.warn("pdfjs extraction failed, trying raw ArrayBuffer PDF text scanner:", pdfErr);
+      }
+
+      // Raw PDF ArrayBuffer Stream Text Scanner Fallback
+      try {
+        const rawText = extractRawTextFromPdfArrayBuffer(arrayBuffer);
+        if (rawText.trim().length > 15) {
+          return {
+            text: cleanAndSanitizeReportText(rawText),
+            images: extractedImages
+          };
+        }
+      } catch (rawPdfErr) {
+        console.warn("Raw PDF stream scanner failed:", rawPdfErr);
       }
     }
   }
@@ -558,6 +571,48 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
     text: `Event Report: ${cleanBaseName}`,
     images: []
   };
+}
+
+/**
+ * Direct raw text extractor from PDF stream bytes when pdf.js worker fails
+ */
+function extractRawTextFromPdfArrayBuffer(buffer: ArrayBuffer): string {
+  try {
+    const textDecoder = new TextDecoder('latin1');
+    const raw = textDecoder.decode(buffer);
+    const textParts: string[] = [];
+    
+    // Extract text inside Tj PDF stream objects: (text) Tj
+    const tjRegex = /\(([^()\\]*(?:\\.[^()\\]*)*)\)\s*Tj/g;
+    let match: RegExpExecArray | null;
+    while ((match = tjRegex.exec(raw)) !== null) {
+      if (match[1] && match[1].length > 1) {
+        const clean = match[1].replace(/\\([()])/g, '$1');
+        if (!isBinaryOrXmlJunk(clean) && clean.trim().length > 1) {
+          textParts.push(clean);
+        }
+      }
+    }
+    
+    // Extract text inside TJ arrays: [ (str1) -10 (str2) ] TJ
+    const arrayTjRegex = /\[\s*((?:\([^)]*\)|-?\d+\s*)+)\s*\]\s*TJ/g;
+    while ((match = arrayTjRegex.exec(raw)) !== null) {
+      const inner = match[1];
+      const strRegex = /\(([^()\\]*(?:\\.[^()\\]*)*)\)/g;
+      let strMatch: RegExpExecArray | null;
+      let lineBuf = '';
+      while ((strMatch = strRegex.exec(inner)) !== null) {
+        lineBuf += strMatch[1].replace(/\\([()])/g, '$1');
+      }
+      if (lineBuf.trim().length > 1 && !isBinaryOrXmlJunk(lineBuf)) {
+        textParts.push(lineBuf.trim());
+      }
+    }
+
+    return textParts.join('\n');
+  } catch (err) {
+    return '';
+  }
 }
 
 export async function extractTextFromDocument(file: File): Promise<string> {
