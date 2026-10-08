@@ -116,6 +116,16 @@ const ContentWizardPanel: React.FC = () => {
   const handleSetPageCategory = (pageNum: number, category: string) => {
     setPageCategories(prev => ({ ...prev, [pageNum]: category }));
 
+    const categoryBanners: { [cat: string]: string } = {
+      student: 'STUDENT’S ACHIEVEMENTS',
+      faculty: 'FACULTY ACHIEVEMENT',
+      placement: 'CAMPUS PLACEMENT',
+      workshop: 'DEPARTMENT EVENTS',
+      welcome: 'FRESHERS ORIENTATION',
+      custom: 'DEPARTMENT EVENT'
+    };
+    const categoryTagText = categoryBanners[category] || 'DEPARTMENT EVENTS';
+
     const currentTitle = activeProject?.pages[pageNum - 1]?.title || '';
     const defaultTitles: { [cat: string]: string } = {
       student: 'STUDENT ACHIEVEMENTS',
@@ -127,8 +137,29 @@ const ContentWizardPanel: React.FC = () => {
     };
 
     const newDefaultTitle = defaultTitles[category];
-    if (newDefaultTitle && (!currentTitle || currentTitle.includes('Page') || currentTitle.includes('CAMPUS') || currentTitle.includes('STUDENT') || currentTitle.includes('FACULTY') || currentTitle.includes('WORKSHOP') || currentTitle.includes('WELCOME'))) {
-      handleUpdatePageTitle(pageNum - 1, newDefaultTitle);
+    const shouldUpdateTitle = !currentTitle || currentTitle.includes('Page') || currentTitle.includes('CAMPUS') || currentTitle.includes('STUDENT') || currentTitle.includes('FACULTY') || currentTitle.includes('WORKSHOP') || currentTitle.includes('WELCOME');
+
+    if (activeProject && activeProject.pages[pageNum - 1]) {
+      const page = activeProject.pages[pageNum - 1];
+      const updatedElements = page.elements.map(el => {
+        if (el.id.includes('category_tag') || el.id.includes('section_tag')) {
+          return { ...el, text: categoryTagText };
+        }
+        return el;
+      });
+
+      const updatedPages = activeProject.pages.map((p, idx) => {
+        if (idx === pageNum - 1) {
+          return {
+            ...p,
+            title: shouldUpdateTitle && newDefaultTitle ? newDefaultTitle : p.title,
+            elements: updatedElements
+          };
+        }
+        return p;
+      });
+
+      loadProject({ ...activeProject, pages: updatedPages });
     }
   };
 
@@ -1362,7 +1393,15 @@ const ContentWizardPanel: React.FC = () => {
       ];
 
       const cleanTitle = detectAndFixCase(reportConfirmData.title, 'title').toUpperCase();
-      const categoryTag = reportConfirmData.teamName || (reportConfirmData.category === 'student' ? 'STUDENT’S ACHIEVEMENTS' : reportConfirmData.category === 'faculty' ? 'FACULTY ACHIEVEMENT' : 'DEPARTMENT EVENTS');
+      const categoryBanners: { [cat: string]: string } = {
+        student: 'STUDENT’S ACHIEVEMENTS',
+        faculty: 'FACULTY ACHIEVEMENT',
+        placement: 'CAMPUS PLACEMENT',
+        workshop: 'DEPARTMENT EVENTS',
+        welcome: 'FRESHERS ORIENTATION',
+        custom: 'DEPARTMENT EVENT'
+      };
+      const categoryTag = reportConfirmData.categoryTag || categoryBanners[reportConfirmData.category] || 'DEPARTMENT EVENTS';
       const hasPhotos = (reportConfirmData.photos || []).length > 0;
 
       // 1. Category Section Tag (Positioned at y: 205)

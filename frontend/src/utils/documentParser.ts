@@ -17,6 +17,7 @@ export interface ExtractedDocumentResult {
 
 export interface ParsedReportData {
   category: string;
+  categoryTag?: string;
   title: string;
   teamName: string;
   student: string;
@@ -573,21 +574,27 @@ export function parseReportEntities(
   let categoryTag = "DEPARTMENT EVENTS";
   let category = "workshop";
 
-  if (lower.includes("patent") || lower.includes("certification") || lower.includes("nasscom") || lower.includes("hp life") || lower.includes("prize") || lower.includes("winner") || lower.includes("1st place") || lower.includes("2nd prize") || lower.includes("award") || lower.includes("trophy") || lower.includes("shines at") || lower.includes("bagged") || lower.includes("won")) {
-    categoryTag = "STUDENT’S ACHIEVEMENTS";
-    category = "student";
-  } else if (lower.includes("faculty") || lower.includes("research paper") || lower.includes("journal") || lower.includes("publication") || lower.includes("scopus") || lower.includes("ieee") || lower.includes("ijcrt") || lower.includes("authored a research") || lower.includes("co-authored")) {
+  if (lower.includes("workshop") || lower.includes("guest lecture") || lower.includes("seminar") || lower.includes("webinar") || lower.includes("training") || lower.includes("fdp") || lower.includes("campus to career") || lower.includes("skill development") || lower.includes("hands-on") || lower.includes("lecture on") || lower.includes("session on") || lower.includes("inauguration") || lower.includes("organized a")) {
+    categoryTag = "DEPARTMENT EVENTS";
+    category = "workshop";
+  } else if (lower.includes("orientation") || lower.includes("induction") || lower.includes("fresher") || lower.includes("welcome")) {
+    categoryTag = "FRESHERS ORIENTATION";
+    category = "welcome";
+  } else if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("campus drive") || lower.includes("offer letter") || lower.includes("placed")) {
+    categoryTag = "CAMPUS PLACEMENT";
+    category = "placement";
+  } else if (lower.includes("faculty") || lower.includes("research paper") || lower.includes("journal") || lower.includes("publication") || lower.includes("scopus") || lower.includes("ieee") || lower.includes("ijcrt") || lower.includes("authored") || lower.includes("co-authored")) {
     categoryTag = "FACULTY ACHIEVEMENT";
     category = "faculty";
-  } else if (lower.includes("swachh") || lower.includes("nss") || lower.includes("cleanliness drive") || lower.includes("extension activity") || lower.includes("village") || lower.includes("social service") || lower.includes("school in")) {
+  } else if (lower.includes("patent") || lower.includes("certification") || lower.includes("prize") || lower.includes("winner") || lower.includes("1st place") || lower.includes("2nd prize") || lower.includes("award") || lower.includes("trophy") || lower.includes("shines at") || lower.includes("bagged") || lower.includes("won") || lower.includes("hackathon")) {
+    categoryTag = "STUDENT’S ACHIEVEMENTS";
+    category = "student";
+  } else if (lower.includes("swachh") || lower.includes("nss") || lower.includes("cleanliness drive") || lower.includes("extension activity") || lower.includes("village") || lower.includes("social service")) {
     categoryTag = "EXTENSION ACTIVITY";
     category = "custom";
-  } else if (lower.includes("participation") || lower.includes("participated") || lower.includes("visited") || lower.includes("visit") || lower.includes("book fair") || lower.includes("symposium") || lower.includes("fashion show") || lower.includes("outreach")) {
+  } else if (lower.includes("symposium") || lower.includes("fashion show") || lower.includes("outreach") || lower.includes("book fair") || lower.includes("exhibition") || lower.includes("visit")) {
     categoryTag = "STUDENT PARTICIPATION";
     category = "student";
-  } else if (lower.includes("placement") || lower.includes("recruiter") || lower.includes("package") || lower.includes("lpa") || lower.includes("hired") || lower.includes("campus drive") || lower.includes("offer letter") || lower.includes("placed")) {
-    categoryTag = "STUDENT’S ACHIEVEMENTS";
-    category = "placement";
   } else {
     categoryTag = "DEPARTMENT EVENTS";
     category = "workshop";
@@ -978,8 +985,9 @@ export function parseReportEntities(
 
   return {
     category,
+    categoryTag,
     title,
-    teamName: categoryTag, // Storing clean section tag in teamName for easy component consumption
+    teamName: teamName || categoryTag,
     student,
     classDept,
     date: date || "",
