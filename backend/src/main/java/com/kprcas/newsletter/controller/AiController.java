@@ -951,7 +951,7 @@ public class AiController {
             }
         }
 
-        extractedTitle = extractedTitle.replaceAll("^[:\\-\\s•\\*\"']+", "").replaceAll("[:\\-\\s•\\*\"']+$", "").trim();
+        extractedTitle = extractedTitle.replaceAll("^[A-Z][\\s\\.\\-–\"“'”]+(?=[A-Z0-9\"“])", "").replaceAll("^[\"“'\\s]+|[\"”'\\s]+$", "").trim();
         if (extractedTitle.isEmpty()) {
             extractedTitle = category.substring(0, 1).toUpperCase() + category.substring(1) + " Activity";
         } else {
@@ -985,19 +985,19 @@ public class AiController {
             String cand = resMatcher.group(1).replaceAll("[\\r\\n]+", ", ").replaceAll("\\s+", " ").trim();
             cand = cand.replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "").replaceAll("(?i)^Name\\s*:\\s*", "").trim();
             cand = cand.replaceAll("(?i)(?:Head of the Department|Academic Year|1\\.\\s*Introduction|Introduction|Objectives)[\\s\\S]*", "").trim();
-            if (cand.length() > 3 && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("seminar") && !cand.toLowerCase().startsWith("department")) {
+            if (cand.length() > 3 && !isInvalidPerson(cand)) {
                 if (cand.length() > 80) cand = cand.substring(0, 80).replaceAll(",[^,]*$", "").trim();
                 extractedPerson = cand;
             }
         }
 
-        if (extractedPerson.isEmpty()) {
+        if (extractedPerson.isEmpty() || isInvalidPerson(extractedPerson)) {
             Pattern personPattern = Pattern.compile("(?i)(dr\\.|mr\\.|ms\\.|mrs\\.|prof\\.)\\s+([A-Z][a-z]+(?:\\s+[A-Z]\\.?)?(?:\\s+[A-Z][a-z]+)+(?:,\\s*[A-Za-z\\s\\-&]+)?)");
             Matcher personMatcher = personPattern.matcher(text);
             while (personMatcher.find()) {
                 String match = personMatcher.group(0).trim();
                 String matchLower = match.toLowerCase();
-                if (!matchLower.contains("geetha") && !matchLower.contains("sharmila") && !matchLower.contains("principal") && !matchLower.contains("dean")) {
+                if (!matchLower.contains("geetha") && !matchLower.contains("sharmila") && !matchLower.contains("principal") && !matchLower.contains("dean") && !isInvalidPerson(match)) {
                     if (match.length() > 70) match = match.substring(0, 70).trim();
                     extractedPerson = match;
                     break;
@@ -1011,12 +1011,27 @@ public class AiController {
         String extractedClassName = newsletterGeneratorService != null ? newsletterGeneratorService.extractClassName(text) : "";
         String extractedStudentName = newsletterGeneratorService != null ? newsletterGeneratorService.extractStudentName(text) : "";
 
-        if (extractedPerson.isEmpty()) {
-            if (!extractedStudentName.isEmpty()) {
+        if (extractedPerson.isEmpty() || isInvalidPerson(extractedPerson)) {
+            Pattern studentPartPat = Pattern.compile("(?i)(?:records?|participated|participants?|team members?|students?|winners?|achievement of)\\s+([A-Z][a-zA-Z\\s\\.,&]+?(?:of\\s+(?:I|II|III|IV|\\d+)\\s*(?:IT|B\\.Sc|BCA|CS|IT\\s*[A-Z]?)?)?)\\s+(?:participating|in|securing|winning|at)");
+            Matcher sMat = studentPartPat.matcher(text);
+            if (sMat.find()) {
+                String cand = sMat.group(1).trim().replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "");
+                if (!isInvalidPerson(cand)) {
+                    extractedPerson = cand;
+                }
+            }
+        }
+
+        if (extractedPerson.isEmpty() || isInvalidPerson(extractedPerson)) {
+            if (!extractedStudentName.isEmpty() && !isInvalidPerson(extractedStudentName)) {
                 extractedPerson = extractedStudentName;
-            } else if (!extractedMembers.isEmpty()) {
+            } else if (!extractedMembers.isEmpty() && !isInvalidPerson(extractedMembers)) {
                 extractedPerson = extractedMembers;
             }
+        }
+
+        if (isInvalidPerson(extractedPerson)) {
+            extractedPerson = "";
         }
 
         // Extract Venue
@@ -1027,6 +1042,17 @@ public class AiController {
             String vCand = venueMatcher.group(1).trim().replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "").trim();
             if (vCand.length() > 2 && !vCand.toLowerCase().startsWith("date") && !vCand.toLowerCase().startsWith("time") && !vCand.toLowerCase().startsWith("page")) {
                 extractedVenue = vCand;
+            }
+        }
+        if (extractedVenue.isEmpty()) {
+            Pattern venueAtPat = Pattern.compile("(?i)\\b(?:at|venue[:\\s]+)\\s+([A-Z0-9]{2,20}(?:\\s+[A-Z0-9]{2,20})?)");
+            Matcher vAtMat = venueAtPat.matcher(text);
+            if (vAtMat.find()) {
+                String cand = vAtMat.group(1).trim();
+                String uCand = cand.toUpperCase();
+                if (uCand.contains("PSGCAS") || uCand.contains("KPRCAS") || uCand.contains("AUDITORIUM") || uCand.contains("CAMPUS") || uCand.contains("HALL")) {
+                    extractedVenue = uCand;
+                }
             }
         }
 
@@ -1072,83 +1098,113 @@ public class AiController {
         result.put("highlights", extractedHighlights);
         result.put("rawText", text);
 
-        // Synthesize strictly grounded 5 to 6 line concise summary (~60-90 words max)
-        List<String> summaryLines = new ArrayList<>();
+        // Synthesize single continuous news narrative paragraph (Journalistic News Style)
+        List<String> narrativeSentences = new ArrayList<>();
         
-        // Line 1: Title & Department
-        String deptName = !extractedClassName.isEmpty() ? extractedClassName : "Department of Information Technology";
-        String teamStr = !extractedTeamName.isEmpty() ? " in collaboration with " + extractedTeamName : "";
-        summaryLines.add("The " + deptName + teamStr + " organized the event titled \"" + extractedTitle + "\".");
-
-        // Line 2: Mandatory Date & Venue (if in report)
-        if (!extractedDate.isEmpty() || !extractedVenue.isEmpty()) {
-            List<String> sched = new ArrayList<>();
-            if (!extractedDate.isEmpty()) sched.add("Date: " + extractedDate);
-            if (!extractedVenue.isEmpty()) sched.add("Venue: " + extractedVenue);
-            summaryLines.add("Event Schedule: " + String.join(" | ", sched) + ".");
+        String deptName = !extractedClassName.isEmpty() ? extractedClassName : "Department of B.Sc. Information Technology";
+        if (!deptName.toLowerCase().startsWith("department") && !deptName.toLowerCase().startsWith("dept")) {
+            deptName = "Department of " + deptName;
+        }
+        
+        String teamStr = (!extractedTeamName.isEmpty() && !extractedTeamName.equalsIgnoreCase("DEPARTMENT EVENTS") && !extractedTeamName.toUpperCase().contains("DEPARTMENT")) ? 
+            ", in collaboration with " + extractedTeamName + "," : "";
+            
+        String schedStr = "";
+        if (!extractedDate.isEmpty() && !extractedVenue.isEmpty()) {
+            schedStr = " on " + extractedDate + " at " + extractedVenue;
+        } else if (!extractedDate.isEmpty()) {
+            schedStr = " on " + extractedDate;
+        } else if (!extractedVenue.isEmpty()) {
+            schedStr = " at " + extractedVenue;
         }
 
-        // Line 3: Mandatory Resource Person / Speaker / Presenter (if in report)
+        boolean isPart = lower.contains("participat") || extractedTitle.contains("PARTICIPATION");
+        boolean isAch = lower.contains("secured") || lower.contains("prize") || lower.contains("award") || lower.contains("1st place") || extractedTitle.contains("ACHIEVEMENT");
+
+        if (isPart) {
+            narrativeSentences.add("The " + deptName + teamStr + " organized student participation in the event titled \"" + extractedTitle + "\"" + schedStr + ".");
+        } else if (isAch) {
+            narrativeSentences.add("The " + deptName + teamStr + " recorded the outstanding achievement in the event titled \"" + extractedTitle + "\"" + schedStr + ".");
+        } else {
+            narrativeSentences.add("The " + deptName + teamStr + " organized the event titled \"" + extractedTitle + "\"" + schedStr + ".");
+        }
+
         if (!extractedPerson.isEmpty()) {
-            summaryLines.add("Resource Person / Speaker: " + extractedPerson + ".");
-        }
-
-        // Line 4: Mandatory Purpose of the Event (if in report)
-        if (!extractedPurpose.isEmpty() && extractedPurpose.length() > 10) {
-            String cleanPurp = extractedPurpose.replaceAll("(?i)^(?:Purpose of the Event|Purpose|Objective\\(s\\)?|Objectives|Aim)[:\\s]*", "").trim();
-            String[] parts = cleanPurp.split("(?<=[.!?])\\s+");
-            if (parts.length > 0 && !parts[0].trim().isEmpty()) {
-                summaryLines.add("Purpose: " + parts[0].trim());
+            String pLower = extractedPerson.toLowerCase();
+            if (pLower.contains("participat") || pLower.contains("student") || pLower.contains("team") || isPart || isAch) {
+                if (isAch && (lower.contains("1st place") || lower.contains("cash award") || lower.contains("secured"))) {
+                    narrativeSentences.add("Student team " + extractedPerson + " demonstrated outstanding technical expertise and secured 1st place along with a cash award.");
+                } else {
+                    narrativeSentences.add("Student delegates " + extractedPerson + " actively represented the department and demonstrated commendable effort during the event.");
+                }
+            } else {
+                narrativeSentences.add("The session featured distinguished resource person " + extractedPerson + ", who delivered an insightful address.");
             }
         }
 
-        // Line 5 & 6: Extra Important Highlights & Outcomes strictly from report
-        if (!extractedSummary.isEmpty() && extractedSummary.length() > 15 && summaryLines.size() < 6) {
+        if (!extractedPurpose.isEmpty() && extractedPurpose.length() > 10) {
+            String cleanPurp = extractedPurpose.replaceAll("(?i)^(?:Purpose of the Event|Purpose|Objective\\(s\\)?|Objectives|Aim)[:\\s]*", "").trim();
+            if (!cleanPurp.toLowerCase().contains("documented as part")) {
+                if (cleanPurp.toLowerCase().startsWith("to ")) {
+                    narrativeSentences.add("The primary objective of the program was " + cleanPurp + ".");
+                } else {
+                    narrativeSentences.add("The primary objective of the event was to " + Character.toLowerCase(cleanPurp.charAt(0)) + cleanPurp.substring(1) + ".");
+                }
+            }
+        }
+
+        if (!extractedSummary.isEmpty() && extractedSummary.length() > 15 && narrativeSentences.size() < 5) {
             String cleanSumm = extractedSummary
-                .replaceAll("(?i)^(?:1\\.\\s*Introduction|2\\.\\s*Summary|Events Conducted|Summary of the Event)[:\\s]*", "")
+                .replaceAll("(?i)^(?:1\\.\\s*Introduction|2\\.\\s*Summary|Events Conducted|Summary of the Event|Event Details)[:\\s]*", "")
                 .trim();
             String[] sSentences = cleanSumm.split("(?<=[.!?])\\s+");
             for (String s : sSentences) {
                 String trimmed = s.trim();
-                if (trimmed.length() > 15 && summaryLines.size() < 6) {
-                    summaryLines.add("Highlights: " + trimmed);
-                    if (summaryLines.size() >= 6) break;
+                if (trimmed.length() > 15 && narrativeSentences.size() < 5 && !trimmed.toLowerCase().contains("documented as part")) {
+                    narrativeSentences.add(trimmed);
+                    break;
                 }
             }
         }
 
-        if (summaryLines.size() < 6 && !extractedOutcome.isEmpty() && extractedOutcome.length() > 15) {
-            String cleanOut = extractedOutcome.replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes)[:\\s]*", "").trim();
+        if (!extractedOutcome.isEmpty() && extractedOutcome.length() > 10 && narrativeSentences.size() < 5) {
+            String cleanOut = extractedOutcome.replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes|Outcome / Achievement)[:\\s]*", "").trim();
             String[] outParts = cleanOut.split("(?<=[.!?])\\s+");
-            if (outParts.length > 0 && !outParts[0].trim().isEmpty()) {
-                summaryLines.add("Outcome: " + outParts[0].trim());
+            if (outParts.length > 0 && !outParts[0].trim().isEmpty() && !outParts[0].toLowerCase().contains("documented as part")) {
+                narrativeSentences.add("As key outcomes, " + outParts[0].trim() + ".");
             }
         }
 
-        // If still under 5 lines, pull clean sentences directly from raw text
-        if (summaryLines.size() < 5 && text != null && !text.isEmpty()) {
-            String[] rawSentences = text.split("(?<=[.!?])\\s+|[\\r\\n]+");
-            for (String rawS : rawSentences) {
-                String trimmed = rawS.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
-                if (trimmed.length() > 20 && trimmed.length() < 150 &&
-                    !summaryLines.contains(trimmed) &&
-                    !trimmed.toLowerCase().startsWith("page ") &&
-                    !trimmed.toLowerCase().startsWith("signature") &&
-                    !trimmed.toLowerCase().contains("version:")) {
-                    summaryLines.add(trimmed);
-                    if (summaryLines.size() >= 6) break;
-                }
-            }
+        if (narrativeSentences.size() <= 2) {
+            narrativeSentences.add("The initiative provided an interactive platform for participants to enhance technical awareness and practical skills.");
         }
 
-        if (summaryLines.size() > 6) {
-            summaryLines = summaryLines.subList(0, 6);
-        }
+        narrativeSentences.add("The event was documented as part of the " + deptName + "'s activities for the academic year 2026–2027.");
 
-        String generatedFullArticle = String.join("\n", summaryLines);
+        String generatedFullArticle = String.join(" ", narrativeSentences).replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
         result.put("article", generatedFullArticle);
 
         return ResponseEntity.ok(result);
+    }
+
+    private boolean isInvalidPerson(String str) {
+        if (str == null || str.trim().isEmpty()) return true;
+        String s = str.toLowerCase();
+        return s.contains("participated in the event") ||
+               s.contains("conclusion") ||
+               s.contains("documented as part") ||
+               s.contains("head of the department") ||
+               s.contains("academic year") ||
+               s.contains("quality system") ||
+               s.contains("version:") ||
+               s.contains("not provided") ||
+               s.contains("source document") ||
+               s.contains("distinguished resource person") ||
+               s.startsWith("date") ||
+               s.startsWith("venue") ||
+               s.startsWith("department") ||
+               s.length() < 3;
+    }
     }
 
     @PostMapping("/generate-image-caption")

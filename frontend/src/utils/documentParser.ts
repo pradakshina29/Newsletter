@@ -102,11 +102,7 @@ export function cleanAndSanitizeReportText(rawText: string): string {
     .replace(/Prepared by[\s\S]*?Approved by/gi, '')
     // 6. Strip duplicated consecutive words like "with with", "in in", "the the"
     .replace(/\b(with|in|the|of|on|at|and|to|for|a|an|by|is|was|were|has|have|had)\s+\1\b/gi, '$1')
-    // 7. Strip incomplete dangling honorific clauses like "presided over by Dr." or lone "Dr." without a name
-    .replace(/\b(?:presided over by|felicitated by|graced by|addressed by)\s+Dr\.\s*(?=[.\n\s]|$)/gi, '')
-    .replace(/\bDr\.\s*(?=[.\n\s]|$)/gi, '')
-    .replace(/\bre\s+sounding\b/gi, 'resounding')
-    // 8. Normalize whitespace
+    // 7. Normalize whitespace
     .replace(/[ \t]+/g, ' ')
     .replace(/\n\s*\n+/g, '\n\n')
     .trim();
@@ -627,6 +623,30 @@ export async function extractTextFromDocument(file: File): Promise<string> {
 }
 
 /**
+ * Checks if an extracted person or speaker string contains junk, boilerplate, or outcome labels.
+ */
+export function isInvalidPerson(str: string): boolean {
+  if (!str) return true;
+  const s = str.toLowerCase();
+  return (
+    s.includes("participated in the event") ||
+    s.includes("conclusion") ||
+    s.includes("documented as part") ||
+    s.includes("head of the department") ||
+    s.includes("academic year") ||
+    s.includes("quality system") ||
+    s.includes("version:") ||
+    s.includes("not provided") ||
+    s.includes("source document") ||
+    s.includes("distinguished resource person") ||
+    s.startsWith("date") ||
+    s.startsWith("venue") ||
+    s.startsWith("department") ||
+    s.length < 3
+  );
+}
+
+/**
  * Universal NLP & Heuristic Parser for Any Academic / Department Event Report
  * Accurately extracts genuine content, meaning, definitions, context, and key entities from the currently uploaded file.
  */
@@ -786,6 +806,12 @@ export function parseReportEntities(
     cleanTitleCandidate = titleWords.slice(0, 8).join(' ');
   }
 
+  // Strip isolated single-letter section prefixes like D "CORPORATE WAR - PARTICIPATION"
+  cleanTitleCandidate = cleanTitleCandidate
+    .replace(/^[A-Z][\s\.\-–"“'”]+(?=[A-Z0-9"“])/i, '')
+    .replace(/^["“'\s]+|["”'\s]+$/g, '')
+    .trim();
+
   title = cleanTitleCandidate.toUpperCase().replace(/\s+/g, ' ').trim();
 
   // 3. Resource Person / Speaker / Chief Guest / Student Achievers / Facilitator
@@ -808,10 +834,7 @@ export function parseReportEntities(
     if (candidate.length > 3 && 
         !isBinaryOrXmlJunk(candidate) &&
         !candidate.includes('/') &&
-        !candidate.toLowerCase().startsWith("date") && 
-        !candidate.toLowerCase().startsWith("seminar") && 
-        !candidate.toLowerCase().startsWith("department") && 
-        !candidate.toLowerCase().includes("distinguished resource person")) {
+        !isInvalidPerson(candidate)) {
       if (candidate.length > 80) {
         candidate = candidate.substring(0, 80).replace(/,[^,]*$/, '').trim();
       }
@@ -819,24 +842,37 @@ export function parseReportEntities(
     }
   }
 
-  if (!student || student.length < 3) {
+  if (!student || isInvalidPerson(student)) {
     const singleLineMatch = sanitizedText.match(
       /(?:Details of Resource Person|Resource Person Details|Resource Person|Chief Guest|Speaker|Trainer|Keynote Speaker|Presented by|Delivered by|Author\(s\)|Expert|Student\(s\)?|Student Name|Students|Winners|Team Members|Recruiter|Company)\s*[:\-\s]+\s*([^\n\r]+)/i
     );
     if (singleLineMatch && singleLineMatch[1]) {
       let cand = singleLineMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
       cand = cand.split(/(?:Head of the Department|Academic Year|1\.\s*Introduction|Introduction|Objectives|Summary)/i)[0].trim();
-      if (cand.length > 3 && !isBinaryOrXmlJunk(cand) && !cand.includes('/') && !cand.toLowerCase().startsWith("date") && !cand.toLowerCase().startsWith("venue") && !cand.toLowerCase().startsWith("department")) {
+      if (!isInvalidPerson(cand) && !isBinaryOrXmlJunk(cand) && !cand.includes('/')) {
         student = cand;
       }
     }
   }
 
-  if (!student || student.length < 4) {
+  if (!student || isInvalidPerson(student)) {
+    const studentPartMatch = sanitizedText.match(
+      /(?:records?|participated|participants?|team members?|students?|winners?|achievement of)\s+([A-Z][a-zA-Z\s\.,&]+?(?:of\s+(?:I|II|III|IV|\d+)\s*(?:IT|B\.Sc|BCA|CS|IT\s*[A-Z]?)?)?)\s+(?:participating|in|securing|winning|at)/i
+    );
+    if (studentPartMatch && studentPartMatch[1]) {
+      const cand = studentPartMatch[1].trim().replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
+      if (!isInvalidPerson(cand)) {
+        student = cand;
+      }
+    }
+  }
+
+  if (!student || isInvalidPerson(student)) {
     const honorificMatches = sanitizedText.match(/(?:Dr\.|Prof\.|Mr\.|Ms\.|Mrs\.)\s+[A-Z][a-z]+(?:\s+[A-Z]\.?)?(?:\s+[A-Z][a-z]+)+(?:,\s*[A-Za-z\s\-&]+)?/g);
     if (honorificMatches && honorificMatches.length > 0) {
       const filtered = honorificMatches.filter(h => 
         !isBinaryOrXmlJunk(h) &&
+        !isInvalidPerson(h) &&
         !h.toLowerCase().includes("geetha") && 
         !h.toLowerCase().includes("sharmila") &&
         !h.toLowerCase().includes("principal") &&
@@ -850,7 +886,9 @@ export function parseReportEntities(
     }
   }
 
-  if (student) {
+  if (isInvalidPerson(student)) {
+    student = "";
+  } else if (student) {
     student = student.replace(/,\s*,/g, ',').replace(/\s+/g, ' ').trim();
   }
 
@@ -880,8 +918,6 @@ export function parseReportEntities(
   if (hodMatch && hodMatch[1] && !isBinaryOrXmlJunk(hodMatch[1])) {
     hodName = hodMatch[1].trim();
   }
-
-  // 5. Student Anchors / Vote of Thanks
 
   // 6. Class & Department
   let classDept = "";
@@ -913,7 +949,7 @@ export function parseReportEntities(
     }
   }
 
-  // 8. Event Date (ONLY IF FOUND IN CURRENT DOCUMENT, with date range support)
+  // 8. Event Date (ONLY IF FOUND IN CURRENT DOCUMENT)
   let date = "";
   const dateMatch = sanitizedText.match(/(?:Event Date|Date of the Event|Date)\s*[:\s]+\s*([0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4}(?:\s*(?:to|-)\s*[0-9]{1,2}[\/\-\.][0-9]{1,2}[\/\-\.][0-9]{4})?|[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4}(?:\s*(?:to|-)\s*[0-9]{1,2}\s+[A-Za-z]+\s+[0-9]{4})?|[A-Za-z]+\s+[0-9]{1,2}(?:,\s*[0-9]{4})?(?:\s*(?:to|-)\s*[A-Za-z]+\s+[0-9]{1,2},?\s+[0-9]{4})?|[A-Za-z]+\s+[0-9]{4})/i) ||
                     sanitizedText.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4}(?:\s*(?:to|-)\s*\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{4})?\b/);
@@ -924,13 +960,22 @@ export function parseReportEntities(
     }
   }
 
-  // 9. Venue & Attendance (ONLY IF FOUND IN CURRENT DOCUMENT)
+  // 9. Venue & Attendance
   let venue = "";
   const venueMatch = sanitizedText.match(/(?:Venue|Hall|Auditorium|Lab|Location|Premises)\s*[:\s]+\s*([^\n\r,]+)/i);
   if (venueMatch && venueMatch[1] && !isBinaryOrXmlJunk(venueMatch[1])) {
     const vCandidate = decodeXmlEntities(venueMatch[1].trim()).replace(/^[:\-\s,]+|[:\-\s,]+$/g, '');
     if (vCandidate.length > 2 && !vCandidate.toLowerCase().startsWith("date") && !vCandidate.toLowerCase().startsWith("time") && !vCandidate.toLowerCase().startsWith("page")) {
       venue = vCandidate;
+    }
+  }
+  if (!venue) {
+    const venueAtMatch = sanitizedText.match(/(?:at|venue[:\s]+)\s+([A-Z0-9]{2,20}(?:\s+[A-Z0-9]{2,20})?)/i);
+    if (venueAtMatch && venueAtMatch[1]) {
+      const cand = venueAtMatch[1].trim();
+      if (["PSGCAS", "KPRCAS", "AUDITORIUM", "CAMPUS", "HALL", "LAB"].some(v => cand.toUpperCase().includes(v))) {
+        venue = cand.toUpperCase();
+      }
     }
   }
 
@@ -975,51 +1020,76 @@ export function parseReportEntities(
   const details = summary || purpose || sanitizedText.substring(0, 300);
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Comprehensive Grounded Narrative (Preserving full report text, purpose, summary & outcomes)
-  const fullArticleSections: string[] = [];
+  // 11. Single Continuous Grounded News Paragraph Narrative (Journalistic News Style)
+  const paragraphSentences: string[] = [];
 
-  // Line 1: Header / Event Announcement
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-  const teamClause = teamName && teamName !== categoryTag ? `, in collaboration with ${teamName},` : '';
-  fullArticleSections.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}".`);
+  const teamClause = (teamName && teamName !== categoryTag && !teamName.toUpperCase().includes('DEPARTMENT')) ? `, in collaboration with ${teamName},` : '';
+  const schedulePhrase = [date ? `on ${date}` : '', venue ? `at ${venue}` : ''].filter(Boolean).join(' ');
 
-  // Line 2: Schedule & Venue
-  if (date || venue) {
-    const scheduleParts = [];
-    if (date) scheduleParts.push(`Date: ${date}`);
-    if (venue) scheduleParts.push(`Venue: ${venue}`);
-    fullArticleSections.push(`Event Schedule: ${scheduleParts.join(' | ')}.`);
+  const isParticipationEvent = lower.includes('participat') || title.includes('PARTICIPATION');
+  const isAchievementEvent = lower.includes('secured') || lower.includes('prize') || lower.includes('award') || lower.includes('1st place') || title.includes('ACHIEVEMENT');
+
+  if (isParticipationEvent) {
+    paragraphSentences.push(`The ${deptDisplayName}${teamClause} organized student participation in the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.`);
+  } else if (isAchievementEvent) {
+    paragraphSentences.push(`The ${deptDisplayName}${teamClause} recorded the outstanding achievement in the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.`);
+  } else {
+    paragraphSentences.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.`);
   }
 
-  // Line 3: Resource Person / Speaker
-  if (student) {
-    fullArticleSections.push(`Resource Person / Speaker: ${student}.`);
+  if (student && !isInvalidPerson(student)) {
+    const sLower = student.toLowerCase();
+    if (sLower.includes('participat') || sLower.includes('student') || sLower.includes('team') || isParticipationEvent || isAchievementEvent) {
+      if (isAchievementEvent && (lower.includes('1st place') || lower.includes('cash award') || lower.includes('secured'))) {
+        paragraphSentences.push(`Student team ${student} demonstrated outstanding technical expertise and secured 1st place along with a cash award.`);
+      } else {
+        paragraphSentences.push(`Student delegates ${student} actively represented the department and demonstrated commendable effort during the event.`);
+      }
+    } else {
+      paragraphSentences.push(`The session featured distinguished resource person ${student}, who delivered an insightful address.`);
+    }
   }
 
-  // Purpose of the Event (FULL)
   if (purpose && purpose.length > 10) {
     const cleanPurp = purpose.replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\s]*/i, '').trim();
-    fullArticleSections.push(`Purpose of the Event:\n${cleanPurp}`);
+    const purpParts = cleanPurp.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 5);
+    if (purpParts.length > 0) {
+      const pText = purpParts[0].trim();
+      if (pText.toLowerCase().startsWith('to ')) {
+        paragraphSentences.push(`The primary objective of the program was ${pText.substring(3)}.`);
+      } else {
+        paragraphSentences.push(`The primary objective of the event was to ${pText.charAt(0).toLowerCase()}${pText.slice(1)}.`);
+      }
+    }
   }
 
-  // Summary of the Event (FULL)
   if (summary && summary.length > 10) {
-    const cleanSumm = summary.replace(/^(?:Summary of the Event|Summary|Events Conducted)[:\s]*/i, '').trim();
-    fullArticleSections.push(`Summary of the Event:\n${cleanSumm}`);
+    const cleanSumm = summary
+      .replace(/^(?:Summary of the Event|Summary|Events Conducted|Event Details)[:\s]*/i, '')
+      .replace(/\bThe event was\s+(?:Dr\.|Mr\.|Ms\.)?\s*[A-Z][a-z]+\s*,\s*/gi, '')
+      .trim();
+    const summParts = cleanSumm.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 8 && !s.toLowerCase().startsWith('version') && !s.toLowerCase().startsWith('page') && !s.toLowerCase().includes('documented as part'));
+    if (summParts.length > 0 && paragraphSentences.length < 5) {
+      paragraphSentences.push(summParts[0].trim());
+    }
   }
 
-  // Outcome of the Event (FULL)
   if (outcome && outcome.length > 10) {
-    const cleanOut = outcome.replace(/^(?:Outcome of the Event|Outcome|Key Outcomes)[:\s]*/i, '').trim();
-    fullArticleSections.push(`Outcome of the Event:\n${cleanOut}`);
+    const cleanOut = outcome.replace(/^(?:Outcome of the Event|Outcome|Key Outcomes|Outcome \/ Achievement)[:\s]*/i, '').trim();
+    const outParts = cleanOut.split(/(?<=[.!?])\s+/).filter(s => s.trim().length > 8 && !s.toLowerCase().includes('documented as part'));
+    if (outParts.length > 0 && paragraphSentences.length < 5) {
+      paragraphSentences.push(`As key outcomes, ${outParts[0].trim()}.`);
+    }
   }
 
-  // Fallback: If purpose/summary/outcome were not separately matched, include full sanitizedText
-  if (fullArticleSections.length <= 3 && sanitizedText && sanitizedText.length > 30) {
-    fullArticleSections.push(sanitizedText);
+  if (paragraphSentences.length <= 2) {
+    paragraphSentences.push(`The initiative provided an interactive platform for participants to enhance technical awareness and practical skills.`);
   }
 
-  const article = deduplicateSentences(fullArticleSections.join('\n\n'));
+  paragraphSentences.push(`The event was documented as part of the ${deptDisplayName}'s activities for the academic year 2026–2027.`);
+
+  const article = deduplicateSentences(paragraphSentences.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim());
 
   return {
     category,
