@@ -1,10 +1,16 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
 
-// Ensure PDF worker is initialized gracefully
+// Ensure PDF worker is initialized gracefully with cross-origin Blob URL fallback
 try {
   if (typeof window !== 'undefined' && pdfjsLib && pdfjsLib.GlobalWorkerOptions) {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '3.11.174'}/pdf.worker.min.js`;
+    try {
+      const workerCode = `importScripts("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '3.11.174'}/pdf.worker.min.js");`;
+      const blob = new Blob([workerCode], { type: 'application/javascript' });
+      pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(blob);
+    } catch (_) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version || '3.11.174'}/pdf.worker.min.js`;
+    }
   }
 } catch (e) {
   console.warn("Could not set PDF worker URL:", e);
@@ -969,81 +975,51 @@ export function parseReportEntities(
   const details = summary || purpose || sanitizedText.substring(0, 300);
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Strictly Grounded 5 to 6 Line Concise Summary (~60-90 words max)
-  // Contains mandatory fields (Title, Date, Resource Person, Purpose) and extra important details strictly from uploaded file
-  const lines: string[] = [];
+  // 11. Comprehensive Grounded Narrative (Preserving full report text, purpose, summary & outcomes)
+  const fullArticleSections: string[] = [];
 
-  // Line 1: Title & Department
+  // Line 1: Header / Event Announcement
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
   const teamClause = teamName && teamName !== categoryTag ? `, in collaboration with ${teamName},` : '';
-  lines.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}".`);
+  fullArticleSections.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}".`);
 
-  // Line 2: Mandatory Date & Venue (if present in report)
+  // Line 2: Schedule & Venue
   if (date || venue) {
     const scheduleParts = [];
     if (date) scheduleParts.push(`Date: ${date}`);
     if (venue) scheduleParts.push(`Venue: ${venue}`);
-    lines.push(`Event Schedule: ${scheduleParts.join(' | ')}.`);
+    fullArticleSections.push(`Event Schedule: ${scheduleParts.join(' | ')}.`);
   }
 
-  // Line 3: Mandatory Resource Person / Speaker / Presenter (if present in report)
+  // Line 3: Resource Person / Speaker
   if (student) {
-    lines.push(`Resource Person / Speaker: ${student}.`);
+    fullArticleSections.push(`Resource Person / Speaker: ${student}.`);
   }
 
-  // Line 4: Mandatory Purpose of the Event (if present in report)
+  // Purpose of the Event (FULL)
   if (purpose && purpose.length > 10) {
     const cleanPurp = purpose.replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\s]*/i, '').trim();
-    const firstPurpSentence = cleanPurp.split(/(?<=[.!?])\s+/)[0];
-    if (firstPurpSentence && firstPurpSentence.length > 10) {
-      lines.push(`Purpose: ${firstPurpSentence}`);
-    }
+    fullArticleSections.push(`Purpose of the Event:\n${cleanPurp}`);
   }
 
-  // Line 5 & 6: Extra Important Highlights & Outcomes strictly from the report text
-  if (summary && summary.length > 15 && lines.length < 6) {
-    const cleanSumm = summary
-      .replace(/^(?:1\.\s*Introduction|2\.\s*Summary|Events Conducted|Summary of the Event)[:\s]*/i, '')
-      .replace(/\bDepartment\s*:\s*[^\.]+\./gi, '')
-      .replace(/\bVenue\s*:\s*[^\.]+\./gi, '')
-      .replace(/\bDate\s*:\s*[^\.]+\./gi, '')
-      .trim();
-    const summSentences = cleanSumm.split(/(?<=[.!?])\s+/);
-    for (const s of summSentences) {
-      const trimmed = s.trim();
-      if (trimmed.length > 15 && lines.length < 6) {
-        lines.push(`Highlights: ${trimmed}`);
-        if (lines.length >= 6) break;
-      }
-    }
+  // Summary of the Event (FULL)
+  if (summary && summary.length > 10) {
+    const cleanSumm = summary.replace(/^(?:Summary of the Event|Summary|Events Conducted)[:\s]*/i, '').trim();
+    fullArticleSections.push(`Summary of the Event:\n${cleanSumm}`);
   }
 
-  if (lines.length < 6 && outcome && outcome.length > 15) {
+  // Outcome of the Event (FULL)
+  if (outcome && outcome.length > 10) {
     const cleanOut = outcome.replace(/^(?:Outcome of the Event|Outcome|Key Outcomes)[:\s]*/i, '').trim();
-    const outSentence = cleanOut.split(/(?<=[.!?])\s+/)[0];
-    if (outSentence && outSentence.length > 10) {
-      lines.push(`Outcome: ${outSentence}`);
-    }
+    fullArticleSections.push(`Outcome of the Event:\n${cleanOut}`);
   }
 
-  // If still less than 5 lines, extract key clean lines directly from rawText
-  if (lines.length < 5 && sanitizedText) {
-    const rawSentences = sanitizedText.split(/(?<=[.!?])\s+|\n+/);
-    for (const rawS of rawSentences) {
-      const trimmed = rawS.replace(/^[•\-\*\d+\.]\s*/, '').trim();
-      if (trimmed.length > 20 && trimmed.length < 150 &&
-          !isBinaryOrXmlJunk(trimmed) &&
-          !lines.some(l => l.toLowerCase().includes(trimmed.toLowerCase().substring(0, 15))) &&
-          !trimmed.toLowerCase().startsWith("page ") &&
-          !trimmed.toLowerCase().startsWith("signature") &&
-          !trimmed.toLowerCase().includes("version:")) {
-        lines.push(trimmed);
-        if (lines.length >= 6) break;
-      }
-    }
+  // Fallback: If purpose/summary/outcome were not separately matched, include full sanitizedText
+  if (fullArticleSections.length <= 3 && sanitizedText && sanitizedText.length > 30) {
+    fullArticleSections.push(sanitizedText);
   }
 
-  const article = deduplicateSentences(lines.slice(0, 6).join('\n'));
+  const article = deduplicateSentences(fullArticleSections.join('\n\n'));
 
   return {
     category,
