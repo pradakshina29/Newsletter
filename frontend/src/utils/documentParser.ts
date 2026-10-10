@@ -1035,16 +1035,51 @@ export function parseReportEntities(
     .trim();
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Extract Authentic Report Narrative directly from the uploaded file text
-  const cleanBodyParagraphs: string[] = [];
+  // 11. Journalistic Newspaper-Style Narrative Synthesizer
+  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
+  const isParticipation = lower.includes('participat') || title.toUpperCase().includes('PARTICIPATION');
+  const isAchievement = lower.includes('secured') || lower.includes('prize') || lower.includes('cash award') || lower.includes('1st place') || title.toUpperCase().includes('ACHIEVEMENT');
+  const isWorkshop = lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || title.toUpperCase().includes('WORKSHOP');
 
-  // Extract structured sections (Purpose, Summary, Outcome) directly if present
+  const leadParagraphs: string[] = [];
+
+  if (isParticipation) {
+    const studentStr = student && !isInvalidPerson(student) ? `Students ${student}` : `Student delegates`;
+    const venueStr = venue ? `hosted at ${venue}` : `at the host institution`;
+    const dateStr = date ? ` on ${date}` : ``;
+    leadParagraphs.push(`${studentStr} representing the ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), actively participated in the competitive event titled "${title}" ${venueStr}${dateStr}.`);
+  } else if (isAchievement) {
+    const studentStr = student && !isInvalidPerson(student) ? `Student achiever(s) ${student}` : `The student delegation`;
+    const venueStr = venue ? `held at ${venue}` : `at the host institution`;
+    const dateStr = date ? ` on ${date}` : ``;
+    leadParagraphs.push(`${studentStr} representing the ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), recorded stellar success in the event titled "${title}" ${venueStr}${dateStr}.`);
+  } else if (isWorkshop) {
+    const venueStr = venue ? `at ${venue}` : `at KPRCAS campus`;
+    const dateStr = date ? ` on ${date}` : ``;
+    leadParagraphs.push(`The ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), organized the technical workshop titled "${title}"${dateStr} ${venueStr}.`);
+    if (student && !isInvalidPerson(student)) {
+      leadParagraphs.push(`The session featured resource speaker / expert ${student}, who delivered practical domain insights.`);
+    }
+  } else {
+    const venueStr = venue ? `at ${venue}` : `at KPRCAS campus`;
+    const dateStr = date ? ` on ${date}` : ``;
+    leadParagraphs.push(`The ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), conducted the academic program titled "${title}"${dateStr} ${venueStr}.`);
+    if (student && !isInvalidPerson(student)) {
+      leadParagraphs.push(`The program witnessed enthusiastic participation from ${student}.`);
+    }
+  }
+
+  // Add authentic document details (Purpose, Summary, Outcome)
+  const bodyParagraphs: string[] = [];
+
   if (purpose && purpose.length > 5) {
     const cleanPurp = purpose
       .replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
       .trim();
-    if (cleanPurp) cleanBodyParagraphs.push(cleanPurp.endsWith('.') ? cleanPurp : `${cleanPurp}.`);
+    if (cleanPurp && !cleanPurp.toLowerCase().includes("documented as part")) {
+      bodyParagraphs.push(cleanPurp.endsWith('.') ? cleanPurp : `${cleanPurp}.`);
+    }
   }
 
   if (summary && summary.length > 5) {
@@ -1052,7 +1087,9 @@ export function parseReportEntities(
       .replace(/^(?:Summary of the Event|Summary|Proceedings|Events Conducted|Event Details)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
       .trim();
-    if (cleanSumm) cleanBodyParagraphs.push(cleanSumm.endsWith('.') ? cleanSumm : `${cleanSumm}.`);
+    if (cleanSumm && !cleanSumm.toLowerCase().includes("documented as part")) {
+      bodyParagraphs.push(cleanSumm.endsWith('.') ? cleanSumm : `${cleanSumm}.`);
+    }
   }
 
   if (outcome && outcome.length > 5) {
@@ -1060,11 +1097,13 @@ export function parseReportEntities(
       .replace(/^(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Achievement|Key Outcomes)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome|Conclusion|Head of the Department)/gi, '')
       .trim();
-    if (cleanOut) cleanBodyParagraphs.push(cleanOut.endsWith('.') ? cleanOut : `${cleanOut}.`);
+    if (cleanOut && !cleanOut.toLowerCase().includes("documented as part")) {
+      bodyParagraphs.push(cleanOut.endsWith('.') ? cleanOut : `${cleanOut}.`);
+    }
   }
 
-  // If structured sections were not labeled with standard headers, extract clean narrative body lines from raw document text
-  if (cleanBodyParagraphs.length === 0) {
+  // Fallback: If structured sections were missing, extract clean raw body paragraphs
+  if (bodyParagraphs.length === 0) {
     const rawParagraphs = sanitizedText
       .split(/(?:[\r\n]{2,}|\n(?=[A-Z0-9]))/)
       .map(p => p.replace(/\s+/g, ' ').trim())
@@ -1080,23 +1119,22 @@ export function parseReportEntities(
                !lowerP.startsWith("academic year") && 
                !lowerP.includes("geo-tagged") && 
                !lowerP.includes("signature of") && 
+               !lowerP.includes("documented as part") &&
                !lowerP.includes("quality system document") &&
                !lowerP.includes("kprcas/iqac");
       });
 
     if (rawParagraphs.length > 0) {
-      cleanBodyParagraphs.push(...rawParagraphs);
+      bodyParagraphs.push(...rawParagraphs.slice(0, 3));
     }
   }
 
-  // Fallback ONLY if the document file contained zero narrative text
-  if (cleanBodyParagraphs.length === 0) {
-    const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-    const schedulePhrase = [date ? `on ${date}` : '', venue ? `at ${venue}` : ''].filter(Boolean).join(' ');
-    cleanBodyParagraphs.push(`The ${deptDisplayName} recorded the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.${student ? ` Participants / Student achievers: ${student}.` : ''}`);
-  }
+  const fullStory = [
+    leadParagraphs.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim(),
+    bodyParagraphs.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim()
+  ].filter(Boolean).join('\n\n');
 
-  const article = deduplicateSentences(cleanBodyParagraphs.join('\n\n'));
+  const article = deduplicateSentences(fullStory);
 
   return {
     category,
