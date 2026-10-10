@@ -1118,68 +1118,34 @@ public class AiController {
             schedStr = " at " + extractedVenue;
         }
 
-        boolean isPart = lower.contains("participat") || extractedTitle.contains("PARTICIPATION");
-        boolean isAch = lower.contains("secured") || lower.contains("prize") || lower.contains("award") || lower.contains("1st place") || extractedTitle.contains("ACHIEVEMENT");
-
-        if (isPart) {
-            narrativeSentences.add("The " + deptName + teamStr + " organized student participation in the event titled \"" + extractedTitle + "\"" + schedStr + ".");
-        } else if (isAch) {
-            narrativeSentences.add("The " + deptName + teamStr + " recorded the outstanding achievement in the event titled \"" + extractedTitle + "\"" + schedStr + ".");
-        } else {
-            narrativeSentences.add("The " + deptName + teamStr + " organized the event titled \"" + extractedTitle + "\"" + schedStr + ".");
-        }
+        narrativeSentences.add("The " + deptName + teamStr + " organized the event titled \"" + extractedTitle + "\"" + schedStr + ".");
 
         if (!extractedPerson.isEmpty()) {
-            String pLower = extractedPerson.toLowerCase();
-            if (pLower.contains("participat") || pLower.contains("student") || pLower.contains("team") || isPart || isAch) {
-                if (isAch && (lower.contains("1st place") || lower.contains("cash award") || lower.contains("secured"))) {
-                    narrativeSentences.add("Student team " + extractedPerson + " demonstrated outstanding technical expertise and secured 1st place along with a cash award.");
-                } else {
-                    narrativeSentences.add("Student delegates " + extractedPerson + " actively represented the department and demonstrated commendable effort during the event.");
-                }
-            } else {
-                narrativeSentences.add("The session featured distinguished resource person " + extractedPerson + ", who delivered an insightful address.");
-            }
+            narrativeSentences.add("Resource person / key participant: " + extractedPerson + ".");
         }
 
-        if (!extractedPurpose.isEmpty() && extractedPurpose.length() > 10) {
+        if (!extractedPurpose.isEmpty() && extractedPurpose.length() > 5) {
             String cleanPurp = extractedPurpose.replaceAll("(?i)^(?:Purpose of the Event|Purpose|Objective\\(s\\)?|Objectives|Aim)[:\\s]*", "").trim();
-            if (!cleanPurp.toLowerCase().contains("documented as part")) {
-                if (cleanPurp.toLowerCase().startsWith("to ")) {
-                    narrativeSentences.add("The primary objective of the program was " + cleanPurp + ".");
-                } else {
-                    narrativeSentences.add("The primary objective of the event was to " + Character.toLowerCase(cleanPurp.charAt(0)) + cleanPurp.substring(1) + ".");
-                }
+            if (!cleanPurp.isEmpty()) {
+                narrativeSentences.add(cleanPurp.endsWith(".") ? cleanPurp : cleanPurp + ".");
             }
         }
 
-        if (!extractedSummary.isEmpty() && extractedSummary.length() > 15 && narrativeSentences.size() < 5) {
+        if (!extractedSummary.isEmpty() && extractedSummary.length() > 5) {
             String cleanSumm = extractedSummary
                 .replaceAll("(?i)^(?:1\\.\\s*Introduction|2\\.\\s*Summary|Events Conducted|Summary of the Event|Event Details)[:\\s]*", "")
                 .trim();
-            String[] sSentences = cleanSumm.split("(?<=[.!?])\\s+");
-            for (String s : sSentences) {
-                String trimmed = s.trim();
-                if (trimmed.length() > 15 && narrativeSentences.size() < 5 && !trimmed.toLowerCase().contains("documented as part")) {
-                    narrativeSentences.add(trimmed);
-                    break;
-                }
+            if (!cleanSumm.isEmpty()) {
+                narrativeSentences.add(cleanSumm.endsWith(".") ? cleanSumm : cleanSumm + ".");
             }
         }
 
-        if (!extractedOutcome.isEmpty() && extractedOutcome.length() > 10 && narrativeSentences.size() < 5) {
+        if (!extractedOutcome.isEmpty() && extractedOutcome.length() > 5) {
             String cleanOut = extractedOutcome.replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes|Outcome / Achievement)[:\\s]*", "").trim();
-            String[] outParts = cleanOut.split("(?<=[.!?])\\s+");
-            if (outParts.length > 0 && !outParts[0].trim().isEmpty() && !outParts[0].toLowerCase().contains("documented as part")) {
-                narrativeSentences.add("As key outcomes, " + outParts[0].trim() + ".");
+            if (!cleanOut.isEmpty()) {
+                narrativeSentences.add(cleanOut.endsWith(".") ? cleanOut : cleanOut + ".");
             }
         }
-
-        if (narrativeSentences.size() <= 2) {
-            narrativeSentences.add("The initiative provided an interactive platform for participants to enhance technical awareness and practical skills.");
-        }
-
-        narrativeSentences.add("The event was documented as part of the " + deptName + "'s activities for the academic year 2026–2027.");
 
         String generatedFullArticle = String.join(" ", narrativeSentences).replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
         result.put("article", generatedFullArticle);

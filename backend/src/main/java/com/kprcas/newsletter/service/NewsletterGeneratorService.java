@@ -228,33 +228,32 @@ public class NewsletterGeneratorService {
         int contentPagesCount = 6; // Pages 2 to 7
 
         if (activities.size() == 1) {
-            // Expand 1 major activity across all 6 pages
             Activity act = activities.get(0);
             String[] pageTitles = {
-                    act.title + " - Overview",
-                    "Objectives & Planning",
-                    "Key Highlights & Sessions",
-                    "Practical Exercises & Sandbox",
-                    "Interactive Media Showcase",
-                    "Outcomes & Valedictory"
+                    act.title,
+                    "FACULTY RESEARCH & SCHOLARLY PUBLICATIONS",
+                    "CAMPUS PLACEMENT DRIVES & RECRUITMENT",
+                    "STUDENT ACHIEVEMENTS & COMPETITIONS",
+                    "DEPARTMENT WORKSHOPS & SKILL ENHANCEMENT",
+                    "EDITORIAL BOARD & LOOKING FORWARD"
             };
             String[] pageSubtitles = {
-                    "Welcoming participants and inaugurating the event",
-                    "Establishing the academic vision for the session",
-                    "Delving into core concepts and training modules",
-                    "Developing prototypes and collaborative mini-projects",
-                    "Visual highlights of student interactions and labs",
-                    "Recognizing participation and outlining future career scopes"
+                    "Department Official Academic Event Report",
+                    "High-impact research, journal papers, and academic innovation",
+                    "Preparing students for corporate leadership and technical careers",
+                    "Celebrating excellence in hackathons, symposia, and awards",
+                    "Interactive hands-on training and expert guest lectures",
+                    "Official publication desk and upcoming department updates"
             };
 
-            String overviewText = "In alignment with the department's commitment to academic excellence, the Department of " + department + " organized a specialized program focusing on " + act.title + ". " + act.content;
-            String objectivesText = "The main objectives of this session were to provide student attendees with robust foundations in " + act.title + " techniques and methodologies. Faculty advisors collaborated with industry partners to design a comprehensive syllabus aligned with emerging industrial trends.";
-            String highlightsText = "Detailed highlights of the sessions include active discussions and keynote presentations. Mentors explained real-world applications and answered students' queries regarding modern career pathways in the domain of " + department + ".";
-            String practicalText = "Laboratory sandbox sessions allowed student groups to collaborate on practical mini projects. By working through guided exercises, participants converted theoretical logic into functioning models, gaining significant hand-on capabilities.";
-            String mediaText = "The event's gallery captures the active engagement of students. Participants prepared workspace wireframes, collaborated on laptop configurations, and successfully presented their final mini project demos to the evaluation committee.";
-            String outcomesText = "The event successfully concluded with certificate distribution. Feedback sheets filled by the students showed high satisfaction. This academic milestone further strengthens the department's commitment to career readiness.";
+            String overviewText = act.content != null && !act.content.trim().isEmpty() ? act.content : ("The Department of " + department + " organized the event titled " + act.title + ".");
+            String researchText = "The Department of " + department + " actively fosters high-impact research, peer-reviewed journal publications, and interdisciplinary innovation. Faculty members and student researchers contribute novel algorithms, experimental frameworks, and domain solutions that advance academic excellence.";
+            String placementText = "The Department of " + department + " maintains strong corporate partnerships to offer students premier career opportunities. Pre-placement coding bootcamps, mock interviews, and technical reviews ensure that candidates excel in competitive hiring drives.";
+            String achievementsText = "Students from the Department of " + department + " consistently excel in national hackathons, technical paper showcases, and inter-collegiate symposia. The department proudly recognizes their competitive achievements and academic dedication.";
+            String workshopText = "To supplement theoretical learning, the Department of " + department + " hosts regular technical workshops, guest lectures, and laboratory sandbox sessions. These hands-on initiatives prepare attendees with industry-standard software skills.";
+            String editorialText = "The Editorial Board expresses heartfelt gratitude to the Management, Principal, Head of Department, faculty advisors, and student coordinators for publishing this newsletter edition. We invite your feedback and contributions for future releases.";
 
-            String[] pageTexts = { overviewText, objectivesText, highlightsText, practicalText, mediaText, outcomesText };
+            String[] pageTexts = { overviewText, researchText, placementText, achievementsText, workshopText, editorialText };
 
             for (int i = 0; i < contentPagesCount; i++) {
                 List<Map<String, Object>> elements = new ArrayList<>();
