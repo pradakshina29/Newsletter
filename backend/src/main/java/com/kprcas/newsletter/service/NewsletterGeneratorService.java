@@ -730,8 +730,21 @@ public class NewsletterGeneratorService {
             act.teamName = teamName;
             act.members = members;
             act.className = className;
-            act.studentName = studentName;
-            act.content = enhanceAcademicWriting(cleanedChunk, department, date);
+            
+            // Extract specific student/achiever for this chunk if available
+            Pattern sPat = Pattern.compile("(?i)(?:records?|participated|participants?|team members?|students?|winners?|achievement of)\\s+([A-Z][a-zA-Z\\s\\.,&]+?(?:of\\s+(?:I|II|III|IV|\\d+)\\s*(?:IT|B\\.Sc|BCA|CS|IT\\s*[A-Z]?)?)?)\\s+(?:participating|in|securing|winning|at)");
+            Matcher sMat = sPat.matcher(cleanedChunk);
+            if (sMat.find()) {
+                String foundStudent = sMat.group(1).trim().replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "");
+                if (!isInvalidPerson(foundStudent)) {
+                    act.studentName = foundStudent;
+                }
+            }
+            if (act.studentName == null || act.studentName.isEmpty() || isInvalidPerson(act.studentName)) {
+                act.studentName = studentName;
+            }
+
+            act.content = synthesizeNewsArticle(cleanedChunk, department, date);
             act.images = getImagesForActivity(department, act.type, act.title);
             list.add(act);
         }
@@ -745,12 +758,160 @@ public class NewsletterGeneratorService {
             act.className = className;
             act.studentName = studentName;
             act.content = "The Department of " + department + " conducted engaging academic and extra-curricular programs during this period. " +
-                          "These sessions provided students with practical exposure and key learning insights.";
+                          "These sessions provided students with practical exposure and key learning insights.\n\n" +
+                          "The initiative was documented as part of the department's academic activities for the academic year 2026–2027.";
             act.images = getImagesForActivity(department, "General", "");
             list.add(act);
         }
 
         return list;
+    }
+
+    public String synthesizeNewsArticle(String rawChunk, String department, String defaultDate) {
+        if (rawChunk == null || rawChunk.trim().isEmpty()) return "";
+
+        String text = rawChunk
+            .replaceAll("(?i)KPR\\s*COLLEGE\\s*OF\\s*ARTS[^\n]*", "")
+            .replaceAll("(?i)Quality System Document[^\n]*", "")
+            .replaceAll("(?i)Version:\\s*\\d+", "")
+            .replaceAll("(?i)Page \\d+ of \\d+", "")
+            .replaceAll("(?i)Signature of the [^\n]*", "")
+            .replaceAll("(?i)Prepared by[\\s\\S]*?Approved by", "")
+            .trim();
+
+        String lower = text.toLowerCase();
+
+        String title = extractActivityTitle(text);
+        title = title.replaceAll("^[A-Z][\\s\\.\\-–\"“'”]+(?=[A-Z0-9\"“])", "").replaceAll("^[\"“'\\s]+|[\"”'\\s]+$", "").trim();
+        if (title.isEmpty()) title = "Department Academic Event";
+
+        String date = defaultDate;
+        Pattern datePattern = Pattern.compile("(?i)\\b\\d{1,2}\\s+(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+\\d{4}|\\b\\d{1,2}[\\/\\-\\.]\\d{1,2}[\\/\\-\\.]\\d{4}\\b");
+        Matcher dateMatcher = datePattern.matcher(text);
+        if (dateMatcher.find()) {
+            date = dateMatcher.group(0);
+        }
+
+        String venue = "";
+        Pattern venuePattern = Pattern.compile("(?i)\\b(?:at|venue[:\\s]+)\\s+([A-Z0-9]{2,20}(?:\\s+[A-Z0-9]{2,20})?)");
+        Matcher venueMatcher = venuePattern.matcher(text);
+        if (venueMatcher.find()) {
+            String vCand = venueMatcher.group(1).trim().toUpperCase();
+            if (vCand.contains("PSGCAS") || vCand.contains("KPRCAS") || vCand.contains("AUDITORIUM") || vCand.contains("CAMPUS") || vCand.contains("HALL")) {
+                venue = vCand;
+            }
+        }
+
+        String achievers = "";
+        Pattern studentPartPat = Pattern.compile("(?i)(?:records?|participated|participants?|team members?|students?|winners?|achievement of)\\s+([A-Z][a-zA-Z\\s\\.,&]+?(?:of\\s+(?:I|II|III|IV|\\d+)\\s*(?:IT|B\\.Sc|BCA|CS|IT\\s*[A-Z]?)?)?)\\s+(?:participating|in|securing|winning|at)");
+        Matcher sMat = studentPartPat.matcher(text);
+        if (sMat.find()) {
+            achievers = sMat.group(1).trim().replaceAll("^[:\\-\\s,]+", "").replaceAll("[:\\-\\s,]+$", "");
+        }
+
+        if (achievers.isEmpty() || isInvalidPerson(achievers)) {
+            Pattern personPattern = Pattern.compile("(?i)(dr\\.|mr\\.|ms\\.|mrs\\.|prof\\.)\\s+([A-Z][a-z]+(?:\\s+[A-Z]\\.?)?(?:\\s+[A-Z][a-z]+)+(?:,\\s*[A-Za-z\\s\\-&]+)?)");
+            Matcher personMatcher = personPattern.matcher(text);
+            if (personMatcher.find()) {
+                String match = personMatcher.group(0).trim();
+                if (!isInvalidPerson(match)) {
+                    achievers = match;
+                }
+            }
+        }
+
+        if (isInvalidPerson(achievers)) achievers = "";
+
+        String details = text
+            .replaceAll("(?i)(?:Introduction|Event Details|Outcome\\s*\\/\\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department|Academic Year 20\\d{2}–20\\d{2})", " ")
+            .replaceAll("\\s+", " ")
+            .trim();
+
+        String award = "";
+        if (lower.contains("1st place") || lower.contains("first place") || lower.contains("cash award") || lower.contains("secured 1st")) {
+            award = "secured 1st place along with a cash award";
+        } else if (lower.contains("2nd place") || lower.contains("second prize")) {
+            award = "secured 2nd place in the competition";
+        } else if (lower.contains("winner") || lower.contains("won")) {
+            award = "emerged as top winner in the competition";
+        }
+
+        List<String> para1Sentences = new ArrayList<>();
+        List<String> para2Sentences = new ArrayList<>();
+
+        String deptDisplayName = department.toLowerCase().startsWith("department") ? department : "Department of " + department;
+
+        boolean isPart = lower.contains("participat") || title.toUpperCase().contains("PARTICIPATION");
+        boolean isAch = !award.isEmpty() || lower.contains("secured") || lower.contains("prize") || lower.contains("award") || title.toUpperCase().contains("ACHIEVEMENT");
+        boolean isWorkshop = lower.contains("workshop") || lower.contains("seminar") || lower.contains("lecture") || lower.contains("talk");
+
+        String schedPhrase = (!date.isEmpty() ? " on " + date : "") + (!venue.isEmpty() ? " at " + venue : "");
+
+        if (isAch) {
+            para1Sentences.add("The " + deptDisplayName + " recorded a proud academic milestone in the event titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            if (!achievers.isEmpty()) {
+                para1Sentences.add("Student achievers " + achievers + " demonstrated outstanding domain expertise and technical rigor during the competitive rounds.");
+            }
+            if (!award.isEmpty()) {
+                para1Sentences.add("Exhibiting competitive excellence, the team " + award + ".");
+            }
+        } else if (isPart) {
+            para1Sentences.add("The " + deptDisplayName + " organized active student representation in the competitive event titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            if (!achievers.isEmpty()) {
+                para1Sentences.add("Student delegates " + achievers + " represented KPRCAS with great enthusiasm, presenting structured solutions and practical demonstrations.");
+            }
+        } else if (isWorkshop) {
+            para1Sentences.add("The " + deptDisplayName + " hosted an enriching technical session titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            if (!achievers.isEmpty()) {
+                para1Sentences.add("The session featured distinguished resource expert " + achievers + ", who delivered comprehensive insights on modern industry practices.");
+            }
+        } else {
+            para1Sentences.add("The " + deptDisplayName + " successfully organized the academic initiative titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            if (!achievers.isEmpty()) {
+                para1Sentences.add("The program witnessed enthusiastic involvement from " + achievers + ".");
+            }
+        }
+
+        String[] rawSentences = details.split("(?<=[.!?])\\s+");
+        for (String s : rawSentences) {
+            String tr = s.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
+            if (tr.length() > 20 && tr.length() < 180 && 
+                !isInvalidPerson(tr) &&
+                !tr.toLowerCase().contains("recorded the event") &&
+                !tr.toLowerCase().contains("was documented as part") &&
+                !tr.toLowerCase().contains("source document")) {
+                para2Sentences.add(tr);
+                if (para2Sentences.size() >= 2) break;
+            }
+        }
+
+        if (para2Sentences.isEmpty()) {
+            para2Sentences.add("The program provided participants with hands-on exposure, enabling students to bridge theoretical classroom concepts with real-world enterprise applications.");
+        }
+
+        para2Sentences.add("The initiative was documented as part of the " + deptDisplayName + "'s academic activities for the academic year 2026–2027.");
+
+        String fullStory = String.join(" ", para1Sentences) + "\n\n" + String.join(" ", para2Sentences);
+        return fullStory.replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
+    }
+
+    private boolean isInvalidPerson(String str) {
+        if (str == null || str.trim().isEmpty()) return true;
+        String s = str.toLowerCase();
+        return s.contains("participated in the event") ||
+               s.contains("conclusion") ||
+               s.contains("documented as part") ||
+               s.contains("head of the department") ||
+               s.contains("academic year") ||
+               s.contains("quality system") ||
+               s.contains("version:") ||
+               s.contains("not provided") ||
+               s.contains("source document") ||
+               s.contains("distinguished resource person") ||
+               s.startsWith("date") ||
+               s.startsWith("venue") ||
+               s.startsWith("department") ||
+               s.length() < 3;
     }
 
     public String extractTeamName(String prompt) {
