@@ -422,7 +422,7 @@ const ContentWizardPanel: React.FC = () => {
         const sForm = getStudentForm(pageNum);
         headlineVal = sForm.title ? detectAndFixCase(sForm.title, 'title') : detectAndFixCase(page.title || "STUDENT ACHIEVEMENTS", 'title');
         subTitleVal = sForm.teamName ? `Team: ${detectAndFixCase(sForm.teamName, 'title')}` : sForm.award ? `Project Purpose: ${detectAndFixCase(sForm.award, 'title')}` : "Department Student Recognition";
-        if (!structuredText.trim() || sForm.title || sForm.teamName || sForm.student || sForm.award || sForm.details || sForm.keywords || sForm.host) {
+        if (!structuredText.trim()) {
           const cleanTitle = sForm.title ? detectAndFixCase(sForm.title, 'title') : (page.title || 'Student Academic Initiative');
           const cleanTeamName = sForm.teamName ? detectAndFixCase(sForm.teamName, 'title') : '';
           const cleanHost = sForm.host ? detectAndFixCase(sForm.host, 'title') : 'Respected Principal Dr. P. Geetha, Deans of various schools, and Heads of Departments';
@@ -448,7 +448,7 @@ const ContentWizardPanel: React.FC = () => {
         const fForm = getFacultyForm(pageNum);
         headlineVal = fForm.paper ? detectAndFixCase(fForm.paper, 'title') : detectAndFixCase(page.title || "FACULTY ACHIEVEMENTS", 'title');
         subTitleVal = fForm.journal ? `Journal: ${detectAndFixCase(fForm.journal, 'title')}` : "Academic Research Excellence";
-        if (!structuredText.trim() || fForm.paper || fForm.faculty || fForm.journal || fForm.contribution) {
+        if (!structuredText.trim()) {
           const cPpr = fForm.paper ? detectAndFixCase(fForm.paper, 'title') : 'Advanced Research Publication';
           const cFac = fForm.faculty ? detectAndFixCase(fForm.faculty, 'title') : 'Department Faculty Members';
           const cJrn = fForm.journal ? detectAndFixCase(fForm.journal, 'title') : 'Indexed Academic Journal';
@@ -470,7 +470,7 @@ const ContentWizardPanel: React.FC = () => {
         const pForm = getPlacementForm(pageNum);
         headlineVal = pForm.company ? `CAMPUS PLACEMENT - ${detectAndFixCase(pForm.company, 'title')}` : detectAndFixCase(page.title || "CAMPUS PLACEMENTS", 'title');
         subTitleVal = pForm.package ? `Package: ${detectAndFixCase(pForm.package, 'upper')}` : "Industry Career Placements";
-        if (!structuredText.trim() || pForm.company || pForm.domain || pForm.count || pForm.package || pForm.highlights) {
+        if (!structuredText.trim()) {
           const cComp = pForm.company ? detectAndFixCase(pForm.company, 'title') : 'Leading Industry Recruiter';
           const cPkg = pForm.package ? detectAndFixCase(pForm.package, 'upper') : 'Competitive CTC Package';
           const cDom = pForm.domain ? detectAndFixCase(pForm.domain, 'title') : 'Software & Technical Domain';
@@ -492,7 +492,7 @@ const ContentWizardPanel: React.FC = () => {
         const wForm = getWorkshopForm(pageNum);
         headlineVal = wForm.title ? detectAndFixCase(wForm.title, 'title') : detectAndFixCase(page.title || "TECHNICAL WORKSHOP", 'title');
         subTitleVal = wForm.speaker ? `Resource Person: ${detectAndFixCase(wForm.speaker, 'title')}` : "Technical Training";
-        if (!structuredText.trim() || wForm.title || wForm.speaker || wForm.topics || wForm.keywords) {
+        if (!structuredText.trim()) {
           const cTitle = wForm.title ? detectAndFixCase(wForm.title, 'title') : (page.title || 'Technical Skill Workshop');
           const cSpk = wForm.speaker ? detectAndFixCase(wForm.speaker, 'title') : 'Renowned Industry Subject Expert';
           const cDate = wForm.date ? detectAndFixCase(wForm.date, 'title') : 'Recent Academic Session';
@@ -515,7 +515,7 @@ const ContentWizardPanel: React.FC = () => {
         const wlForm = getWelcomeForm(pageNum);
         headlineVal = wlForm.title ? detectAndFixCase(wlForm.title, 'title') : detectAndFixCase(page.title || "ORIENTATION PROGRAM", 'title');
         subTitleVal = wlForm.guest ? `Chief Guest: ${detectAndFixCase(wlForm.guest, 'title')}` : "Academic Welcome";
-        if (!structuredText.trim() || wlForm.title || wlForm.guest || wlForm.highlights) {
+        if (!structuredText.trim()) {
           const cTitle = wlForm.title ? detectAndFixCase(wlForm.title, 'title') : (page.title || 'Freshers Induction & Academic Orientation');
           const cGst = wlForm.guest ? detectAndFixCase(wlForm.guest, 'title') : 'Distinguished Chief Guest and Academic Leaders';
           const cDate = wlForm.date ? detectAndFixCase(wlForm.date, 'title') : 'Academic Session Launch';
@@ -538,7 +538,7 @@ const ContentWizardPanel: React.FC = () => {
         headlineVal = detectAndFixCase(cForm.title || page.title || "DEPARTMENT EVENT", 'title');
         const personVal = cForm.person;
         subTitleVal = personVal ? `Organizer / Guest: ${detectAndFixCase(personVal, 'title')}` : "Campus Engagement";
-        if (!structuredText.trim() || headlineVal) {
+        if (!structuredText.trim()) {
           const cTitle = detectAndFixCase(cForm.title || page.title || "DEPARTMENT ACADEMIC EVENT", 'title');
           const cPerson = cForm.person ? detectAndFixCase(cForm.person, 'title') : 'Event Coordinator and Faculty Convenor';
           const cDetails = cForm.details ? detectAndFixCase(cForm.details, 'sentence') : 'interactive student presentations, project demonstrations, and domain expert feedback';
