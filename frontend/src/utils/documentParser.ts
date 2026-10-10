@@ -1035,106 +1035,98 @@ export function parseReportEntities(
     .trim();
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Journalistic Newspaper-Style Narrative Synthesizer
+  // 11. Journalistic Newspaper-Style Narrative Synthesizer (Single Cohesive Paragraph Structure matching reference PDF)
+  const titleUpper = title.toUpperCase();
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-  const isParticipation = lower.includes('participat') || title.toUpperCase().includes('PARTICIPATION');
-  const isAchievement = lower.includes('secured') || lower.includes('prize') || lower.includes('cash award') || lower.includes('1st place') || title.toUpperCase().includes('ACHIEVEMENT');
-  const isWorkshop = lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || title.toUpperCase().includes('WORKSHOP');
+  const isParticipation = lower.includes('participat') || titleUpper.includes('PARTICIPATION');
+  const isAchievement = lower.includes('secured') || lower.includes('prize') || lower.includes('cash award') || lower.includes('1st place') || titleUpper.includes('ACHIEVEMENT') || titleUpper.includes('PATENT') || titleUpper.includes('CERTIFICATION');
+  const isWorkshop = lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || titleUpper.includes('WORKSHOP');
 
-  const leadParagraphs: string[] = [];
+  const storySentences: string[] = [];
 
+  // Helper to detect metadata header repetitions (e.g., "TECHRAGA - PROMPT WAR ACHIEVEMENT Department: B.Sc. IT...")
+  const isMetadataHeader = (str: string): boolean => {
+    if (!str) return true;
+    const l = str.toLowerCase();
+    const cleanStr = str.replace(/[^a-zA-Z0-9]/g, '');
+    const cleanTitle = title.replace(/[^a-zA-Z0-9]/g, '');
+    return (
+      l.startsWith("event:") ||
+      l.startsWith("department:") ||
+      l.startsWith("event date:") ||
+      l.startsWith("venue:") ||
+      l.startsWith("academic year:") ||
+      l.startsWith("class & dept:") ||
+      l.startsWith("student achievers:") ||
+      l.includes("quality system document") ||
+      l.includes("documented as part") ||
+      (cleanTitle.length > 5 && cleanStr.toLowerCase() === cleanTitle.toLowerCase()) ||
+      (cleanTitle.length > 5 && l.includes(`event: ${title.toLowerCase()}`))
+    );
+  };
+
+  // Build Lead Journalistic Sentence tailored per category (matching reference newsletter)
   if (isParticipation) {
     const studentStr = student && !isInvalidPerson(student) ? `Students ${student}` : `Student delegates`;
-    const venueStr = venue ? `hosted at ${venue}` : `at the host institution`;
-    const dateStr = date ? ` on ${date}` : ``;
-    leadParagraphs.push(`${studentStr} representing the ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), actively participated in the competitive event titled "${title}" ${venueStr}${dateStr}.`);
-  } else if (isAchievement) {
-    const studentStr = student && !isInvalidPerson(student) ? `Student achiever(s) ${student}` : `The student delegation`;
     const venueStr = venue ? `held at ${venue}` : `at the host institution`;
     const dateStr = date ? ` on ${date}` : ``;
-    leadParagraphs.push(`${studentStr} representing the ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), recorded stellar success in the event titled "${title}" ${venueStr}${dateStr}.`);
-  } else if (isWorkshop) {
-    const venueStr = venue ? `at ${venue}` : `at KPRCAS campus`;
+    storySentences.push(`${studentStr} from ${deptDisplayName} represented KPR College of Arts Science and Research (KPRCAS) in the competitive event "${title}" ${venueStr}${dateStr}.`);
+  } else if (isAchievement) {
+    const studentStr = student && !isInvalidPerson(student) ? `Mr./Ms. ${student}` : `Students`;
+    const venueStr = venue ? `held at ${venue}` : ``;
     const dateStr = date ? ` on ${date}` : ``;
-    leadParagraphs.push(`The ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), organized the technical workshop titled "${title}"${dateStr} ${venueStr}.`);
+    storySentences.push(`${studentStr} from ${deptDisplayName} achieved remarkable recognition by securing top honors in "${title}"${venueStr ? ` ${venueStr}` : ''}${dateStr}.`);
+  } else if (isWorkshop) {
+    const venueStr = venue ? ` at ${venue}` : ` at KPRCAS campus`;
+    const dateStr = date ? ` on ${date}` : ``;
+    storySentences.push(`The ${deptDisplayName}, School of Computing Science organized a specialized workshop titled "${title}"${dateStr}${venueStr}.`);
     if (student && !isInvalidPerson(student)) {
-      leadParagraphs.push(`The session featured resource speaker / expert ${student}, who delivered practical domain insights.`);
+      storySentences.push(`${student} served as the esteemed resource person for the event.`);
     }
   } else {
-    const venueStr = venue ? `at ${venue}` : `at KPRCAS campus`;
+    const venueStr = venue ? ` at ${venue}` : ` at KPRCAS campus`;
     const dateStr = date ? ` on ${date}` : ``;
-    leadParagraphs.push(`The ${deptDisplayName}, KPR College of Arts Science and Research (KPRCAS), conducted the academic program titled "${title}"${dateStr} ${venueStr}.`);
+    storySentences.push(`The ${deptDisplayName}, School of Computing Science conducted the academic program titled "${title}"${dateStr}${venueStr}.`);
     if (student && !isInvalidPerson(student)) {
-      leadParagraphs.push(`The program witnessed enthusiastic participation from ${student}.`);
+      storySentences.push(`The program witnessed enthusiastic participation from ${student}.`);
     }
   }
 
-  // Add authentic document details (Purpose, Summary, Outcome)
-  const bodyParagraphs: string[] = [];
-
-  if (purpose && purpose.length > 5) {
-    const cleanPurp = purpose
-      .replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\-\s/.]*/i, '')
+  // Append authentic extracted details (Purpose, Summary, Outcome) IF clean and non-duplicate
+  const candidates = [purpose, summary, outcome].filter(Boolean);
+  candidates.forEach(cand => {
+    const cleaned = cand
+      .replace(/^(?:Purpose of the Event|Purpose|Summary of the Event|Summary|Outcome of the Event|Outcome|Event Details|Event Description)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
+      .replace(/\s+/g, ' ')
       .trim();
-    if (cleanPurp && !cleanPurp.toLowerCase().includes("documented as part")) {
-      bodyParagraphs.push(cleanPurp.endsWith('.') ? cleanPurp : `${cleanPurp}.`);
+    if (cleaned && cleaned.length > 12 && !isMetadataHeader(cleaned)) {
+      const splitSentences = cleaned.split(/(?<=[.!?])\s+/);
+      splitSentences.forEach(s => {
+        const sTrim = s.trim();
+        if (sTrim.length > 10 && !isMetadataHeader(sTrim) && !storySentences.some(existing => existing.toLowerCase().includes(sTrim.toLowerCase().substring(0, 20)))) {
+          storySentences.push(sTrim.endsWith('.') ? sTrim : `${sTrim}.`);
+        }
+      });
     }
-  }
+  });
 
-  if (summary && summary.length > 5) {
-    const cleanSumm = summary
-      .replace(/^(?:Summary of the Event|Summary|Proceedings|Events Conducted|Event Details)[:\-\s/.]*/i, '')
-      .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
-      .trim();
-    if (cleanSumm && !cleanSumm.toLowerCase().includes("documented as part")) {
-      bodyParagraphs.push(cleanSumm.endsWith('.') ? cleanSumm : `${cleanSumm}.`);
-    }
-  }
-
-  if (outcome && outcome.length > 5) {
-    const cleanOut = outcome
-      .replace(/^(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Achievement|Key Outcomes)[:\-\s/.]*/i, '')
-      .replace(/(?:\/\s*Achievement|Outcome|Conclusion|Head of the Department)/gi, '')
-      .trim();
-    if (cleanOut && !cleanOut.toLowerCase().includes("documented as part")) {
-      bodyParagraphs.push(cleanOut.endsWith('.') ? cleanOut : `${cleanOut}.`);
-    }
-  }
-
-  // Fallback: If structured sections were missing, extract clean raw body paragraphs
-  if (bodyParagraphs.length === 0) {
-    const rawParagraphs = sanitizedText
+  // If no body details were extracted, pull clean raw document lines
+  if (storySentences.length <= 2) {
+    const rawLines = sanitizedText
       .split(/(?:[\r\n]{2,}|\n(?=[A-Z0-9]))/)
       .map(p => p.replace(/\s+/g, ' ').trim())
-      .filter(p => {
-        const lowerP = p.toLowerCase();
-        return p.length > 20 && 
-               !lowerP.startsWith("date:") && 
-               !lowerP.startsWith("venue:") && 
-               !lowerP.startsWith("event title:") && 
-               !lowerP.startsWith("title of") && 
-               !lowerP.startsWith("department of") && 
-               !lowerP.startsWith("kpr college") && 
-               !lowerP.startsWith("academic year") && 
-               !lowerP.includes("geo-tagged") && 
-               !lowerP.includes("signature of") && 
-               !lowerP.includes("documented as part") &&
-               !lowerP.includes("quality system document") &&
-               !lowerP.includes("kprcas/iqac");
-      });
-
-    if (rawParagraphs.length > 0) {
-      bodyParagraphs.push(...rawParagraphs.slice(0, 3));
-    }
+      .filter(p => p.length > 20 && !isMetadataHeader(p));
+    
+    rawLines.forEach(line => {
+      if (storySentences.length < 5 && !storySentences.some(existing => existing.toLowerCase().includes(line.toLowerCase().substring(0, 20)))) {
+        storySentences.push(line.endsWith('.') ? line : `${line}.`);
+      }
+    });
   }
 
-  const fullStory = [
-    leadParagraphs.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim(),
-    bodyParagraphs.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim()
-  ].filter(Boolean).join('\n\n');
-
-  const article = deduplicateSentences(fullStory);
+  // Single Cohesive Paragraph (Matching Reference PDF Format)
+  const article = deduplicateSentences(storySentences.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim());
 
   return {
     category,
