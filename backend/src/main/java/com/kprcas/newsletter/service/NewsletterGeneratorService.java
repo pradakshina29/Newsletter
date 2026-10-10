@@ -847,50 +847,52 @@ public class NewsletterGeneratorService {
         String schedPhrase = (!date.isEmpty() ? " on " + date : "") + (!venue.isEmpty() ? " at " + venue : "");
 
         if (isAch) {
-            para1Sentences.add("The " + deptDisplayName + " recorded a proud academic milestone in the event titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
-            if (!achievers.isEmpty()) {
-                para1Sentences.add("Student achievers " + achievers + " demonstrated outstanding domain expertise and technical rigor during the competitive rounds.");
-            }
+            String studentStr = !achievers.isEmpty() ? "Students " + achievers : "Students";
+            para1Sentences.add(studentStr + " from " + deptDisplayName + " achieved remarkable recognition by securing top honors in \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
             if (!award.isEmpty()) {
                 para1Sentences.add("Exhibiting competitive excellence, the team " + award + ".");
             }
+            para1Sentences.add("The delegates showcased outstanding domain expertise and technical rigor during the evaluation rounds, earning high appreciation from the organizers.");
         } else if (isPart) {
-            para1Sentences.add("The " + deptDisplayName + " organized active student representation in the competitive event titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
-            if (!achievers.isEmpty()) {
-                para1Sentences.add("Student delegates " + achievers + " represented KPRCAS with great enthusiasm, presenting structured solutions and practical demonstrations.");
-            }
+            String studentStr = !achievers.isEmpty() ? "Students " + achievers : "Student delegates";
+            para1Sentences.add(studentStr + " from " + deptDisplayName + " represented KPR College of Arts Science and Research (KPRCAS) in the competitive event \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            para1Sentences.add("The competitive event provided an engaging platform for the delegates to demonstrate domain knowledge, strategic thinking, and collaborative problem-solving.");
+            para1Sentences.add("The active representation highlights the department's dedicated efforts in encouraging experiential learning and student participation across premier institutions.");
         } else if (isWorkshop) {
-            para1Sentences.add("The " + deptDisplayName + " hosted an enriching technical session titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            para1Sentences.add("The " + deptDisplayName + ", School of Computing Science organized a specialized workshop titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
             if (!achievers.isEmpty()) {
-                para1Sentences.add("The session featured distinguished resource expert " + achievers + ", who delivered comprehensive insights on modern industry practices.");
+                para1Sentences.add(achievers + " served as the esteemed resource person for the session.");
             }
+            para1Sentences.add("The interactive session provided comprehensive exposure to contemporary industry trends, practical tools, and real-world methodologies.");
         } else {
-            para1Sentences.add("The " + deptDisplayName + " successfully organized the academic initiative titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            para1Sentences.add("The " + deptDisplayName + ", School of Computing Science conducted the academic program titled \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
             if (!achievers.isEmpty()) {
-                para1Sentences.add("The program witnessed enthusiastic involvement from " + achievers + ".");
+                para1Sentences.add("The program witnessed enthusiastic participation from " + achievers + ".");
             }
+            para1Sentences.add("The initiative concluded with interactive discussions, empowering participants with practical skills and actionable domain insights.");
         }
 
         String[] rawSentences = details.split("(?<=[.!?])\\s+");
         for (String s : rawSentences) {
             String tr = s.replaceAll("^[•\\-\\*\\d+\\.]\\s*", "").trim();
+            String lowerTr = tr.toLowerCase();
             if (tr.length() > 20 && tr.length() < 180 && 
                 !isInvalidPerson(tr) &&
-                !tr.toLowerCase().contains("recorded the event") &&
-                !tr.toLowerCase().contains("was documented as part") &&
-                !tr.toLowerCase().contains("source document")) {
+                !lowerTr.contains("recorded the event") &&
+                !lowerTr.contains("was documented as part") &&
+                !lowerTr.contains("source document") &&
+                !lowerTr.contains("date:") &&
+                !lowerTr.contains("venue:") &&
+                !lowerTr.contains("department:") &&
+                !lowerTr.contains("kpr college") &&
+                (title == null || title.length() < 4 || !lowerTr.contains(title.toLowerCase())) &&
+                (achievers == null || achievers.length() < 4 || !lowerTr.contains(achievers.toLowerCase().substring(0, 10)))) {
                 para2Sentences.add(tr);
                 if (para2Sentences.size() >= 2) break;
             }
         }
 
-        if (para2Sentences.isEmpty()) {
-            para2Sentences.add("The program provided participants with hands-on exposure, enabling students to bridge theoretical classroom concepts with real-world enterprise applications.");
-        }
-
-        para2Sentences.add("The initiative was documented as part of the " + deptDisplayName + "'s academic activities for the academic year 2026–2027.");
-
-        String fullStory = String.join(" ", para1Sentences) + "\n\n" + String.join(" ", para2Sentences);
+        String fullStory = String.join(" ", para1Sentences) + (para2Sentences.isEmpty() ? "" : " " + String.join(" ", para2Sentences));
         return fullStory.replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
     }
 
