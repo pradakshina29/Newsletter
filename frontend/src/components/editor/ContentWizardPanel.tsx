@@ -1049,7 +1049,6 @@ const ContentWizardPanel: React.FC = () => {
         let dateVal = "";
         let detailsVal = "";
         let classVal = "";
-        let teamVal = "";
 
         if (cat === 'student') {
           const s = getStudentForm(pageNum);
@@ -1058,7 +1057,6 @@ const ContentWizardPanel: React.FC = () => {
           dateVal = s.award;
           detailsVal = s.details || s.keywords;
           classVal = s.classDept;
-          teamVal = s.teamName;
         } else if (cat === 'faculty') {
           const f = getFacultyForm(pageNum);
           titleVal = f.paper;
@@ -1126,92 +1124,44 @@ const ContentWizardPanel: React.FC = () => {
           console.warn("Backend AI call failed, using client-side generator:", apiErr);
         }
 
-        // Resilient client-side fallback if server didn't provide text
+        // Prioritize actual extracted document report content if present
+        let existingContent = (generatedArticle || reportConfirmData?.article || detailsVal || "").trim();
+
+        // Strip section header leaks from report content
+        existingContent = existingContent
+          .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Key Outcomes|Conclusion|Head of the Department|Academic Year 20\d{2}–20\d{2}|Quality System Document)/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (existingContent && existingContent.length > 20 && !existingContent.toLowerCase().includes("example report")) {
+          let tonedText = existingContent;
+          if (tone === "shorter") {
+            const sents = tonedText.split(/(?<=[.!?])\s+/);
+            tonedText = sents.slice(0, 3).join(' ');
+          } else if (tone === "academic" || tone === "professional") {
+            tonedText = detectAndFixCase(tonedText, 'sentence');
+          }
+          generatedText = deduplicateSentences(tonedText);
+        }
+
+        // Resilient client-side fallback ONLY if no report text exists at all
         if (!generatedText) {
           const cleanT = currentTitle ? detectAndFixCase(currentTitle, 'title') : 'Academic Event';
           const cleanP = personVal ? detectAndFixCase(personVal, 'title') : 'Student and Faculty Participants';
-          const cleanD = detailsVal ? detectAndFixCase(detailsVal, 'sentence') : 'enriching presentations, interactive discussions, and technical showcases';
           const cleanDept = `Department of ${deptName}`;
-          const cleanTeam = teamVal ? detectAndFixCase(teamVal, 'title') : 'Innovation Team';
 
-          if (cat === 'student') {
-            const sentences = [
-              `The ${cleanDept} proudly organized the distinguished academic initiative titled "${cleanT}" hosted at the KPRCAS campus.`,
-              `The initiative was spearheaded by Team "${cleanTeam}"${classVal ? ` representing ${classVal}` : ''}, demonstrating outstanding technical acumen and disciplined collaboration.`,
-              `Student delegates (${cleanP}) actively showcased practical problem-solving capabilities, rapid prototyping, and software engineering prowess.`,
-              `During the core technical sessions, participants delivered live interactive demonstrations, system architecture walkthroughs, and performance benchmarking.`,
-              cleanD ? `Key project highlights and competition focus areas included: ${cleanD}.` : `The challenges focused on real-world application building, code optimization, algorithmic efficiency, and scalable module deployment.`,
-              `An esteemed evaluation panel comprising senior faculty and domain observers commended the student delegation for their innovative execution and clear presentation.`,
-              `The program provided an impactful platform for participants to exchange ideas, gain structured technical feedback, and refine software development methodologies.`,
-              `The Management, Principal, and Department warmly congratulate all student achievers and participants on their commendable milestone and stellar dedication!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          } else if (cat === 'faculty') {
-            const sentences = [
-              `The ${cleanDept} takes immense pride in celebrating the landmark research achievement titled "${cleanT}".`,
-              `Authored by distinguished faculty researcher(s) ${cleanP}, the scholarly paper was published in a reputed peer-reviewed journal.`,
-              `The published research addresses pressing domain challenges by introducing novel algorithmic frameworks, optimized methodologies, and rigorous experimental validation.`,
-              `The investigation underwent stringent peer review, receiving high accolades from international reviewers for scientific depth and technical merit.`,
-              cleanD ? `Core research contributions and technical focus areas centered on: ${cleanD}.` : `The findings provide valuable architectural insights that establish strong foundations for emerging academic investigations and industry collaborations.`,
-              `This milestone underscores the department's unwavering commitment to cultivating cutting-edge research excellence and intellectual advancement.`,
-              `The breakthrough work will actively enrich ongoing postgraduate research initiatives and specialized laboratory projects across the campus.`,
-              `The Management, Principal, and Department members warmly congratulate ${cleanP} for bringing immense honor and academic distinction to KPRCAS!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          } else if (cat === 'placement') {
-            const sentences = [
-              `The ${cleanDept} successfully conducted a premier campus recruitment drive in partnership with ${cleanT}.`,
-              `The recruitment initiative was organized for prestigious software development and technical roles${dateVal ? ` offering competitive salary packages of ${dateVal}` : ''}.`,
-              `Final year students participated with high enthusiasm and professionalism, clearing rigorous multi-tier aptitude, programming, and technical interview rounds.`,
-              `Corporate recruiters expressed high appreciation for the candidates' strong conceptual fundamentals, analytical agility, and industry readiness.`,
-              `The selection process comprehensively tested live coding capabilities, data structure proficiency, problem troubleshooting, and executive communication skills.`,
-              cleanD ? `Key placement highlights and recruitment tracks included: ${cleanD}.` : `Multiple eligible candidates successfully cleared all evaluation criteria to secure coveted appointment orders with leading industry recruiters.`,
-              `The department placement cell and faculty mentors provided comprehensive pre-placement training, mock interviews, and continuous career guidance.`,
-              `The Management, Principal, and Faculty members extend their heartiest congratulations and best wishes to all placed students for stellar corporate careers!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          } else if (cat === 'workshop') {
-            const sentences = [
-              `The ${cleanDept} organized an intensive, high-impact technical workshop titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
-              `The program featured eminent resource expert ${cleanP}, who shared extensive practical knowledge, industry standards, and advanced engineering techniques.`,
-              `A vibrant cohort of student delegates and faculty members actively participated in the interactive technical sessions and hands-on laboratory modules.`,
-              `The comprehensive syllabus covered core architectural principles, live coding exercises, cloud environments, and industry best practices.`,
-              cleanD ? `Key workshop modules and practical topics explored included: ${cleanD}.` : `Participants engaged in real-time project implementation, addressing complex logic scenarios and troubleshooting real-world engineering constraints.`,
-              `The interactive format enabled attendees to bridge theoretical classroom concepts with modern enterprise workflows and production technologies.`,
-              `The workshop concluded with a comprehensive Q&A session, project reviews, and certificate distribution honoring outstanding participant contributions.`,
-              `The department extends sincere appreciation to the resource persons, faculty convenors, and student attendees for making the workshop a grand success!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          } else if (cat === 'welcome') {
-            const sentences = [
-              `The ${cleanDept} organized a memorable, grand orientation program titled "${cleanT}"${dateVal ? ` on ${dateVal}` : ''}.`,
-              `The auspicious occasion was graced by esteemed Chief Guest ${cleanP}, who delivered an inspiring inaugural address to welcome the newly inducted batch.`,
-              `The program provided students and parents with a comprehensive walkthrough of the academic curriculum, modern laboratory infrastructure, and departmental ethos.`,
-              `In their keynote address, the dignitaries encouraged students to strive for academic curiosity, technical mastery, and holistic personal growth.`,
-              cleanD ? `Event highlights and orientation sessions included: ${cleanD}.` : `Senior student coordinators facilitated interactive ice-breaking sessions, campus tours, and technical club introductions.`,
-              `Interactive discussions and Q&A sessions eased the freshmen's transition into collegiate academic life, building high enthusiasm for the year ahead.`,
-              `The department faculty members reiterated their commitment to providing continuous mentorship, career guidance, and experiential learning opportunities.`,
-              `The Management, Principal, and Department warmly welcome the incoming cohort and wish them an enriching, transformative academic journey at KPRCAS!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          } else {
-            const sentences = [
-              `The ${cleanDept} successfully conducted the flagship academic program titled "${cleanT}" hosted at KPRCAS campus.`,
-              `Organized under the esteemed leadership and coordination of ${cleanP}, the event brought together delegates for an enriching academic experience.`,
-              `The core objective of the initiative was to foster multidisciplinary innovation, practical knowledge transfer, and professional competency among participants.`,
-              `The sessions featured interactive technical discussions, live project demonstrations, and insightful presentations from student and faculty teams.`,
-              cleanD ? `Key event proceedings and focal highlights included: ${cleanD}.` : `Participants actively engaged in collaborative problem-solving, exploring emerging trends and gaining actionable domain perspectives.`,
-              `The initiative witnessed vibrant peer engagement, structured feedback rounds, and insightful deliberations throughout the day.`,
-              `Attendees expressed immense satisfaction with the quality of discussions, technical organization, and practical insights gained during the event.`,
-              `The department warmly congratulates all faculty coordinators, student organizers, and participants for making this academic program a resounding success!`
-            ].filter(Boolean);
-            generatedText = deduplicateSentences(sentences.join(' '));
-          }
+          const sentences = [
+            `The ${cleanDept} organized the academic program titled "${cleanT}".`,
+            cleanP ? `The session featured participation and resource contributions from ${cleanP}.` : '',
+            `The initiative provided an interactive platform for attendees to enhance practical domain awareness and technical skills.`
+          ].filter(Boolean);
+          generatedText = deduplicateSentences(sentences.join(' '));
         }
 
         generatedText = detectAndFixCase(generatedText, 'sentence');
         setGeneratedArticle(generatedText);
-        showSuccess(`Generated AI article copy for Page ${pageNum}! Click 'Apply Content to Page' when ready.`, "AI Copy Ready");
+        handleTextChange(`p${pageNum}_text`, generatedText);
+        showSuccess(`Article copy updated for Page ${pageNum}! Left, Canvas, and Properties are in sync.`, "AI Copy Ready");
       }
     } catch (err) {
       console.error(err);
@@ -3590,7 +3540,11 @@ const ContentWizardPanel: React.FC = () => {
                   <textarea
                     rows={6}
                     value={generatedArticle}
-                    onChange={e => setGeneratedArticle(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setGeneratedArticle(val);
+                      handleTextChange(`p${activePageNum}_text`, val);
+                    }}
                     className="w-full border border-slate-250 dark:border-slate-800 bg-slate-55 dark:bg-slate-950 rounded-xl px-3 py-2 text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-primary leading-relaxed font-sans font-medium"
                   />
 
