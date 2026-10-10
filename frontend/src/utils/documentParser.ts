@@ -1035,31 +1035,16 @@ export function parseReportEntities(
     .trim();
   const keywords = outcome ? outcome.substring(0, 250) : "Technical innovation, analytical problem-solving, domain competencies, student excellence";
 
-  // 11. Multi-Paragraph News Article Generator directly from extracted document text
-  const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-  const teamClause = (teamName && teamName !== categoryTag && !teamName.toUpperCase().includes('DEPARTMENT')) ? `, in collaboration with ${teamName}` : '';
-  const schedulePhrase = [date ? `on ${date}` : '', venue ? `at ${venue}` : ''].filter(Boolean).join(' ');
+  // 11. Extract Authentic Report Narrative directly from the uploaded file text
+  const cleanBodyParagraphs: string[] = [];
 
-  const para1: string[] = [];
-  const para2: string[] = [];
-
-  // Lead narrative sentence using extracted facts
-  para1.push(`The ${deptDisplayName}${teamClause} organized the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.`);
-
-  if (student && !isInvalidPerson(student)) {
-    if (lower.includes('1st place') || lower.includes('prize') || lower.includes('winner') || lower.includes('award')) {
-      para1.push(`Student achiever(s) ${student} demonstrated outstanding technical expertise and earned top distinction.`);
-    } else if (lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || lower.includes('speaker')) {
-      para1.push(`The program featured distinguished speaker/resource person ${student}.`);
-    } else {
-      para1.push(`Enthusiastic participation was recorded from ${student}.`);
-    }
-  }
-
-  // Include actual extracted document sections (Purpose, Summary, Outcome) directly
+  // Extract structured sections (Purpose, Summary, Outcome) directly if present
   if (purpose && purpose.length > 5) {
-    const cleanPurp = purpose.replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\-\s/.]*/i, '').trim();
-    if (cleanPurp) para2.push(cleanPurp.endsWith('.') ? cleanPurp : `${cleanPurp}.`);
+    const cleanPurp = purpose
+      .replace(/^(?:Purpose of the Event|Purpose|Objective\(s\)?|Objectives|Aim)[:\-\s/.]*/i, '')
+      .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
+      .trim();
+    if (cleanPurp) cleanBodyParagraphs.push(cleanPurp.endsWith('.') ? cleanPurp : `${cleanPurp}.`);
   }
 
   if (summary && summary.length > 5) {
@@ -1067,7 +1052,7 @@ export function parseReportEntities(
       .replace(/^(?:Summary of the Event|Summary|Proceedings|Events Conducted|Event Details)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
       .trim();
-    if (cleanSumm) para2.push(cleanSumm.endsWith('.') ? cleanSumm : `${cleanSumm}.`);
+    if (cleanSumm) cleanBodyParagraphs.push(cleanSumm.endsWith('.') ? cleanSumm : `${cleanSumm}.`);
   }
 
   if (outcome && outcome.length > 5) {
@@ -1075,31 +1060,43 @@ export function parseReportEntities(
       .replace(/^(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Achievement|Key Outcomes)[:\-\s/.]*/i, '')
       .replace(/(?:\/\s*Achievement|Outcome|Conclusion|Head of the Department)/gi, '')
       .trim();
-    if (cleanOut) para2.push(cleanOut.endsWith('.') ? cleanOut : `${cleanOut}.`);
+    if (cleanOut) cleanBodyParagraphs.push(cleanOut.endsWith('.') ? cleanOut : `${cleanOut}.`);
   }
 
-  // Fallback: If no structured sections were extracted, pull clean body paragraphs directly from raw text
-  if (para2.length === 0) {
+  // If structured sections were not labeled with standard headers, extract clean narrative body lines from raw document text
+  if (cleanBodyParagraphs.length === 0) {
     const rawParagraphs = sanitizedText
       .split(/(?:[\r\n]{2,}|\n(?=[A-Z0-9]))/)
       .map(p => p.replace(/\s+/g, ' ').trim())
-      .filter(p => p.length > 25 && 
-                   !p.toLowerCase().includes("geo-tagged") && 
-                   !p.toLowerCase().includes("signature") && 
-                   !p.toLowerCase().includes("hod") && 
-                   !p.toLowerCase().includes("quality system document") &&
-                   !p.toLowerCase().includes("kprcas/iqac"));
+      .filter(p => {
+        const lowerP = p.toLowerCase();
+        return p.length > 20 && 
+               !lowerP.startsWith("date:") && 
+               !lowerP.startsWith("venue:") && 
+               !lowerP.startsWith("event title:") && 
+               !lowerP.startsWith("title of") && 
+               !lowerP.startsWith("department of") && 
+               !lowerP.startsWith("kpr college") && 
+               !lowerP.startsWith("academic year") && 
+               !lowerP.includes("geo-tagged") && 
+               !lowerP.includes("signature of") && 
+               !lowerP.includes("quality system document") &&
+               !lowerP.includes("kprcas/iqac");
+      });
+
     if (rawParagraphs.length > 0) {
-      para2.push(rawParagraphs.slice(0, 3).join(' '));
+      cleanBodyParagraphs.push(...rawParagraphs);
     }
   }
 
-  const fullArticleStory = [
-    para1.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim(),
-    para2.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim()
-  ].filter(Boolean).join('\n\n');
+  // Fallback ONLY if the document file contained zero narrative text
+  if (cleanBodyParagraphs.length === 0) {
+    const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
+    const schedulePhrase = [date ? `on ${date}` : '', venue ? `at ${venue}` : ''].filter(Boolean).join(' ');
+    cleanBodyParagraphs.push(`The ${deptDisplayName} recorded the event titled "${title}"${schedulePhrase ? ` ${schedulePhrase}` : ''}.${student ? ` Participants / Student achievers: ${student}.` : ''}`);
+  }
 
-  const article = deduplicateSentences(fullArticleStory);
+  const article = deduplicateSentences(cleanBodyParagraphs.join('\n\n'));
 
   return {
     category,
