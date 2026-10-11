@@ -1001,13 +1001,17 @@ export function parseReportEntities(
   }
 
   let outcome = "";
-  const outcomeMatch = sanitizedText.match(/(?:Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\s*[:\s]+\s*([\s\S]*?)(?=(?:Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|Page \d+|$))/i);
+  const outcomeMatch = sanitizedText.match(/(?:Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\s*[:\s]+\s*([\s\S]*?)(?=(?:Geo-Tagged|Photographs|Head of the Department|Head of Department|HOD|Staff Coordinator|Faculty Coordinator|Student Coordinator|Dean|Principal|Signature|Page \d+|$))/i);
   if (outcomeMatch && outcomeMatch[1] && !isBinaryOrXmlJunk(outcomeMatch[1])) {
     outcome = outcomeMatch[1]
       .replace(/[\r\n]+/g, ' ')
       .replace(/^(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome of the Event|Outcome|Achievement|Key Outcomes|Results|Conclusion)[:\-\s/.]*/i, '')
+      .replace(/(?:Head of the Department|Head of Department|HOD|Staff Coordinator|Faculty Coordinator|Student Coordinator|Dean|Principal|Signature|Outcome\s*\/\s*Achievement|Outcome|Achievement)/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
+    if (outcome.length < 15 || !/[a-zA-Z]{4,}/.test(outcome)) {
+      outcome = "";
+    }
   }
 
   const partMatch = sanitizedText.match(/(?:Total number of Students Participated|Participants Count|Total Beneficiaries|Total Participants|Attendance)[:\s]+(\d+)/i) ||
@@ -1038,11 +1042,26 @@ export function parseReportEntities(
   // 11. Journalistic Newspaper-Style Narrative Synthesizer (Single Cohesive Paragraph Structure matching reference PDF)
   const titleUpper = title.toUpperCase();
   const deptDisplayName = classDept ? (classDept.startsWith('DEPARTMENT') ? classDept : `Department of ${classDept}`) : `Department of ${defaultDepartment}`;
-  const isParticipation = lower.includes('participat') || titleUpper.includes('PARTICIPATION');
-  const isAchievement = lower.includes('secured') || lower.includes('prize') || lower.includes('cash award') || lower.includes('1st place') || titleUpper.includes('ACHIEVEMENT') || titleUpper.includes('PATENT') || titleUpper.includes('CERTIFICATION');
-  const isWorkshop = lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || titleUpper.includes('WORKSHOP');
+  
+  // Prioritize Achievement if title, team name, or category indicates an achievement
+  const hasAchievementKeywords = lower.includes('secured') || lower.includes('prize') || lower.includes('cash award') || lower.includes('1st place') || lower.includes('2nd place') || lower.includes('3rd place') || lower.includes('winner') || lower.includes('won') || lower.includes('achievement') || titleUpper.includes('ACHIEVEMENT') || titleUpper.includes('PATENT') || titleUpper.includes('CERTIFICATION') || categoryTag.includes('ACHIEVEMENT');
+  const isAchievement = hasAchievementKeywords;
+  const isParticipation = !isAchievement && (lower.includes('participat') || titleUpper.includes('PARTICIPATION'));
+  const isWorkshop = !isAchievement && !isParticipation && (lower.includes('workshop') || lower.includes('seminar') || lower.includes('lecture') || lower.includes('talk') || titleUpper.includes('WORKSHOP'));
 
   const storySentences: string[] = [];
+
+  const formatStudentName = (nameStr: string) => {
+    if (!nameStr || isInvalidPerson(nameStr)) return "Students";
+    const trimmed = nameStr.trim();
+    if (/^(?:Mr\.|Ms\.|Mrs\.|Dr\.)/i.test(trimmed)) {
+      return trimmed;
+    }
+    if (/[,;&]|\band\b/i.test(trimmed)) {
+      return `Students ${trimmed}`;
+    }
+    return `Mr./Ms. ${trimmed}`;
+  };
 
   // Helper to detect metadata header repetitions (e.g., "TECHRAGA - PROMPT WAR ACHIEVEMENT Department: B.Sc. IT...")
   const isMetadataHeader = (str: string): boolean => {
@@ -1059,30 +1078,48 @@ export function parseReportEntities(
       l.startsWith("academic year:") ||
       l.startsWith("class & dept:") ||
       l.startsWith("student achievers:") ||
-      l.startsWith("kpr college") ||
+      l.startsWith("outcome:") ||
+      l.startsWith("achievement:") ||
+      l.includes("head of the department") ||
+      l.includes("head of department") ||
+      l.includes("outcome / achievement") ||
+      l.includes("outcome/achievement") ||
+      l.includes("outcome of the event") ||
+      l.includes("key outcomes") ||
+      l.includes("staff coordinator") ||
+      l.includes("faculty coordinator") ||
+      l.includes("student coordinator") ||
       l.includes("quality system document") ||
       l.includes("documented as part") ||
       l.includes("recorded the event") ||
       l.includes("the event was part of") ||
       l.includes("the source report records") ||
       l.includes("co-curricular activities") ||
+      l.includes("kpr college") ||
       l.includes("--------------") ||
+      l === "outcome" ||
+      l === "achievement" ||
+      l === "signature" ||
+      l === "hod" ||
+      l === "dean" ||
+      l === "principal" ||
+      l === "iqac" ||
       (cleanTitle.length > 5 && cleanStr.toLowerCase() === cleanTitle.toLowerCase()) ||
       (cleanTitle.length > 5 && l.includes(`event: ${title.toLowerCase()}`))
     );
   };
 
   // Build Lead Journalistic Sentence tailored per category (matching reference newsletter)
-  if (isParticipation) {
-    const studentStr = student && !isInvalidPerson(student) ? `Students ${student}` : `Student delegates`;
+  if (isAchievement) {
+    const studentStr = formatStudentName(student);
+    const venueStr = venue ? `held at ${venue}` : ``;
+    const dateStr = date ? ` on ${date}` : ``;
+    storySentences.push(`${studentStr} from ${deptDisplayName} achieved remarkable recognition by securing top honors in the competitive event "${title}"${venueStr ? ` ${venueStr}` : ''}${dateStr}.`);
+  } else if (isParticipation) {
+    const studentStr = formatStudentName(student);
     const venueStr = venue ? `held at ${venue}` : `at the host institution`;
     const dateStr = date ? ` on ${date}` : ``;
     storySentences.push(`${studentStr} from ${deptDisplayName} represented KPR College of Arts Science and Research (KPRCAS) in the competitive event "${title}" ${venueStr}${dateStr}.`);
-  } else if (isAchievement) {
-    const studentStr = student && !isInvalidPerson(student) ? `Mr./Ms. ${student}` : `Students`;
-    const venueStr = venue ? `held at ${venue}` : ``;
-    const dateStr = date ? ` on ${date}` : ``;
-    storySentences.push(`${studentStr} from ${deptDisplayName} achieved remarkable recognition by securing top honors in "${title}"${venueStr ? ` ${venueStr}` : ''}${dateStr}.`);
   } else if (isWorkshop) {
     const venueStr = venue ? ` at ${venue}` : ` at KPRCAS campus`;
     const dateStr = date ? ` on ${date}` : ``;
@@ -1099,19 +1136,19 @@ export function parseReportEntities(
     }
   }
 
-  // Append authentic extracted details (Purpose, Summary, Outcome) IF clean and non-duplicate
+  // Append authentic extracted details (Purpose, Summary, Outcome) IF clean, descriptive, and non-duplicate
   const candidates = [purpose, summary, outcome].filter(Boolean);
   candidates.forEach(cand => {
     const cleaned = cand
       .replace(/^(?:Purpose of the Event|Purpose|Summary of the Event|Summary|Outcome of the Event|Outcome|Event Details|Event Description)[:\-\s/.]*/i, '')
-      .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department)/gi, '')
+      .replace(/(?:\/\s*Achievement|Outcome\s*\/\s*Achievement|Outcome|Achievement|Conclusion|Head of the Department|Head of Department|HOD|Staff Coordinator|Faculty Coordinator|Student Coordinator|Signature)/gi, '')
       .replace(/\s+/g, ' ')
       .trim();
-    if (cleaned && cleaned.length > 12 && !isMetadataHeader(cleaned)) {
+    if (cleaned && cleaned.length > 15 && !isMetadataHeader(cleaned)) {
       const splitSentences = cleaned.split(/(?<=[.!?])\s+/);
       splitSentences.forEach(s => {
         const sTrim = s.trim();
-        if (sTrim.length > 10 && !isMetadataHeader(sTrim)) {
+        if (sTrim.length > 12 && !isMetadataHeader(sTrim)) {
           const lowerSTrim = sTrim.toLowerCase();
           // Skip if sentence repeats student names, event title, or phrases already in storySentences
           const repeatsTitle = title && title.length > 4 && lowerSTrim.includes(title.toLowerCase());
@@ -1125,12 +1162,17 @@ export function parseReportEntities(
     }
   });
 
-  // If no body details were extracted, pull clean raw document lines or provide elegant context
+  // If no body details were extracted, pull clean raw document lines ONLY if they represent genuine prose
   if (storySentences.length <= 2) {
     const rawLines = sanitizedText
       .split(/(?:[\r\n]{2,}|\n(?=[A-Z0-9]))/)
       .map(p => p.replace(/\s+/g, ' ').trim())
-      .filter(p => p.length > 20 && !isMetadataHeader(p));
+      .filter(p => {
+        if (p.length < 25 || isMetadataHeader(p)) return false;
+        const lowP = p.toLowerCase();
+        if (lowP.includes('outcome') || lowP.includes('achievement') || lowP.includes('head of the department') || lowP.includes('hod') || lowP.includes('coordinator')) return false;
+        return p.split(/\s+/).length >= 5;
+      });
     
     rawLines.forEach(line => {
       const lineLower = line.toLowerCase();
@@ -1144,14 +1186,23 @@ export function parseReportEntities(
     });
   }
 
-  // Fallback high-quality context sentences if story is still brief (ensures 50-90 words single paragraph without repetition)
+  // Fallback high-quality context sentences if story is still brief (ensures 60-90 words single cohesive paragraph)
   if (storySentences.length < 3) {
-    if (isParticipation) {
+    if (isAchievement) {
+      if (titleUpper.includes('PROMPT') || lower.includes('prompt') || lower.includes('generative ai') || lower.includes('llm')) {
+        storySentences.push(`The competitive event challenged participants on advanced prompt engineering methodologies, problem decomposition, and creative AI problem-solving.`);
+        storySentences.push(`Demonstrating commendable precision and technical ingenuity throughout the rigorous evaluation rounds, the achiever earned high accolades from the jury.`);
+      } else if (titleUpper.includes('DEBUG') || lower.includes('debug') || titleUpper.includes('CODE') || lower.includes('coding')) {
+        storySentences.push(`The competitive event evaluated participants on complex technical problem-solving, rapid debugging skills, and code optimization accuracy.`);
+        storySentences.push(`Demonstrating commendable precision and domain competence throughout the challenging rounds, the achiever earned high accolades from the jury.`);
+      } else {
+        storySentences.push(`The competitive event evaluated participants on rigorous domain challenges, strategic thinking, and analytical problem-solving.`);
+        storySentences.push(`Demonstrating commendable expertise and technical competence throughout the evaluation rounds, the achiever earned high appreciation from the organizers.`);
+      }
+      storySentences.push(`This remarkable milestone highlights the department's continuous dedication to fostering experiential learning and student technical excellence.`);
+    } else if (isParticipation) {
       storySentences.push(`The competitive event provided an engaging platform for the delegates to demonstrate domain knowledge, strategic thinking, and collaborative problem-solving.`);
       storySentences.push(`The active representation highlights the department's dedicated efforts in encouraging experiential learning and student participation across premier institutions.`);
-    } else if (isAchievement) {
-      storySentences.push(`The delegates showcased remarkable analytical capabilities and technical expertise during the evaluation rounds, earning high appreciation from the organizers.`);
-      storySentences.push(`This notable achievement reflects the institution's commitment to academic rigor and student excellence in competitive domains.`);
     } else {
       storySentences.push(`The interactive session provided comprehensive exposure to contemporary industry trends, practical tools, and real-world methodologies.`);
       storySentences.push(`The initiative concluded with interactive discussions, empowering participants with practical skills and actionable domain insights.`);
@@ -1159,7 +1210,14 @@ export function parseReportEntities(
   }
 
   // Single Cohesive Paragraph (Matching Reference PDF Format)
-  const article = deduplicateSentences(storySentences.join(' ').replace(/\s+/g, ' ').replace(/\s+\./g, '.').trim());
+  let rawArticle = storySentences.join(' ')
+    .replace(/(?:\bOutcome\s*\/\s*Achievement\b|\bOutcome of the Event\b|\bHead of the Department\b|\bHead of Department\b|\bHOD\b|\bSignature\b|\bStaff Coordinator\b|\bFaculty Coordinator\b|\bStudent Coordinator\b)[.:\s]*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+\./g, '.')
+    .replace(/\.{2,}/g, '.')
+    .trim();
+
+  const article = deduplicateSentences(rawArticle);
 
   return {
     category,

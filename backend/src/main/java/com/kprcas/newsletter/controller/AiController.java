@@ -1072,7 +1072,7 @@ public class AiController {
         }
 
         String extractedOutcome = "";
-        Pattern outPattern = Pattern.compile("(?i)(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\\s*[:\\s]+\\s*([\\s\\S]*?)(?=(?:Geo-Tagged|Photographs|HOD|Dean|Principal|Signature|Page \\d+|$))");
+        Pattern outPattern = Pattern.compile("(?i)(?:Outcome of the Event|Outcome|Key Outcomes|Feedback & Conclusion|Results|Valedictory|Impact & Takeaways)\\s*[:\\s]+\\s*([\\s\\S]*?)(?=(?:Geo-Tagged|Photographs|Head of the Department|Head of Department|HOD|Staff Coordinator|Faculty Coordinator|Dean|Principal|Signature|Page \\d+|$))");
         Matcher outMatcher = outPattern.matcher(text);
         if (outMatcher.find()) {
             extractedOutcome = outMatcher.group(1).replaceAll("[\\r\\n]+", " ").replaceAll("\\s+", " ").trim();
@@ -1141,13 +1141,21 @@ public class AiController {
         }
 
         if (!extractedOutcome.isEmpty() && extractedOutcome.length() > 5) {
-            String cleanOut = extractedOutcome.replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes|Outcome / Achievement)[:\\s]*", "").trim();
-            if (!cleanOut.isEmpty()) {
+            String cleanOut = extractedOutcome
+                .replaceAll("(?i)^(?:Outcome of the Event|Outcome|Key Outcomes|Outcome / Achievement)[:\\s]*", "")
+                .replaceAll("(?i)(?:Head of the Department|Head of Department|HOD|Staff Coordinator|Faculty Coordinator|Student Coordinator|Signature|Outcome\\s*/\\s*Achievement)", "")
+                .trim();
+            if (!cleanOut.isEmpty() && cleanOut.length() > 15) {
                 narrativeSentences.add(cleanOut.endsWith(".") ? cleanOut : cleanOut + ".");
             }
         }
 
-        String generatedFullArticle = String.join(" ", narrativeSentences).replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
+        String generatedFullArticle = String.join(" ", narrativeSentences)
+            .replaceAll("(?i)\\b(Outcome\\s*/\\s*Achievement|Outcome of the Event|Head of the Department|Head of Department|HOD|Signature|Staff Coordinator|Faculty Coordinator)\\b[.:\\s]*", " ")
+            .replaceAll("\\s+", " ")
+            .replaceAll("\\s+\\.", ".")
+            .replaceAll("\\.{2,}", ".")
+            .trim();
         result.put("article", generatedFullArticle);
 
         return ResponseEntity.ok(result);

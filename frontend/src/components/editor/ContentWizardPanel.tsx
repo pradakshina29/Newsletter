@@ -1248,7 +1248,15 @@ const ContentWizardPanel: React.FC = () => {
                 !isBinaryOrXmlJunk(rawData.article) &&
                 !rawData.article.toLowerCase().includes("example report") && 
                 rawData.article.length > (parsed.article ? parsed.article.length : 80)) {
-              parsed.article = deduplicateSentences(cleanParsedText(rawData.article));
+              const cleanedRaw = cleanParsedText(rawData.article)
+                .replace(/(?:\bOutcome\s*\/\s*Achievement\b|\bOutcome of the Event\b|\bHead of the Department\b|\bHead of Department\b|\bHOD\b|\bSignature\b|\bStaff Coordinator\b|\bFaculty Coordinator\b|\bStudent Coordinator\b)[.:\s]*/gi, ' ')
+                .replace(/\s+/g, ' ')
+                .replace(/\s+\./g, '.')
+                .replace(/\.{2,}/g, '.')
+                .trim();
+              if (cleanedRaw.length > 50) {
+                parsed.article = deduplicateSentences(cleanedRaw);
+              }
             }
           }
         } catch (apiErr) {
@@ -1258,6 +1266,17 @@ const ContentWizardPanel: React.FC = () => {
         const reportPhotos = extracted.images && extracted.images.length > 0 ? extracted.images : (photos || []);
         if (reportPhotos.length > 0) {
           setPhotos(reportPhotos);
+        }
+
+        if (parsed.article) {
+          parsed.article = deduplicateSentences(
+            parsed.article
+              .replace(/(?:\bOutcome\s*\/\s*Achievement\b|\bOutcome of the Event\b|\bHead of the Department\b|\bHead of Department\b|\bHOD\b|\bSignature\b|\bStaff Coordinator\b|\bFaculty Coordinator\b|\bStudent Coordinator\b)[.:\s]*/gi, ' ')
+              .replace(/\s+/g, ' ')
+              .replace(/\s+\./g, '.')
+              .replace(/\.{2,}/g, '.')
+              .trim()
+          );
         }
 
         // 3. Open Report Confirmation & Review Modal with extracted text + photos

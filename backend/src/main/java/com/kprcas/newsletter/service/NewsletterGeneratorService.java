@@ -840,22 +840,32 @@ public class NewsletterGeneratorService {
 
         String deptDisplayName = department.toLowerCase().startsWith("department") ? department : "Department of " + department;
 
-        boolean isPart = lower.contains("participat") || title.toUpperCase().contains("PARTICIPATION");
-        boolean isAch = !award.isEmpty() || lower.contains("secured") || lower.contains("prize") || lower.contains("award") || title.toUpperCase().contains("ACHIEVEMENT");
-        boolean isWorkshop = lower.contains("workshop") || lower.contains("seminar") || lower.contains("lecture") || lower.contains("talk");
+        boolean isAch = title.toUpperCase().contains("ACHIEVEMENT") || !award.isEmpty() || lower.contains("secured") || lower.contains("prize") || lower.contains("award");
+        boolean isPart = !isAch && (lower.contains("participat") || title.toUpperCase().contains("PARTICIPATION"));
+        boolean isWorkshop = !isAch && !isPart && (lower.contains("workshop") || lower.contains("seminar") || lower.contains("lecture") || lower.contains("talk"));
 
         String schedPhrase = (!date.isEmpty() ? " on " + date : "") + (!venue.isEmpty() ? " at " + venue : "");
 
+        String formattedStudent = "Students";
+        if (!achievers.isEmpty()) {
+            String achTrim = achievers.trim();
+            if (achTrim.matches("(?i)^(?:Mr\\.|Ms\\.|Mrs\\.|Dr\\.).*")) {
+                formattedStudent = achTrim;
+            } else if (achTrim.contains(",") || achTrim.contains(" and ") || achTrim.contains("&")) {
+                formattedStudent = "Students " + achTrim;
+            } else {
+                formattedStudent = "Mr./Ms. " + achTrim;
+            }
+        }
+
         if (isAch) {
-            String studentStr = !achievers.isEmpty() ? "Students " + achievers : "Students";
-            para1Sentences.add(studentStr + " from " + deptDisplayName + " achieved remarkable recognition by securing top honors in \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            para1Sentences.add(formattedStudent + " from " + deptDisplayName + " achieved remarkable recognition by securing top honors in \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
             if (!award.isEmpty()) {
                 para1Sentences.add("Exhibiting competitive excellence, the team " + award + ".");
             }
             para1Sentences.add("The delegates showcased outstanding domain expertise and technical rigor during the evaluation rounds, earning high appreciation from the organizers.");
         } else if (isPart) {
-            String studentStr = !achievers.isEmpty() ? "Students " + achievers : "Student delegates";
-            para1Sentences.add(studentStr + " from " + deptDisplayName + " represented KPR College of Arts Science and Research (KPRCAS) in the competitive event \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
+            para1Sentences.add(formattedStudent + " from " + deptDisplayName + " represented KPR College of Arts Science and Research (KPRCAS) in the competitive event \"" + title.toUpperCase() + "\"" + schedPhrase + ".");
             para1Sentences.add("The competitive event provided an engaging platform for the delegates to demonstrate domain knowledge, strategic thinking, and collaborative problem-solving.");
             para1Sentences.add("The active representation highlights the department's dedicated efforts in encouraging experiential learning and student participation across premier institutions.");
         } else if (isWorkshop) {
@@ -884,6 +894,9 @@ public class NewsletterGeneratorService {
                 !lowerTr.contains("date:") &&
                 !lowerTr.contains("venue:") &&
                 !lowerTr.contains("department:") &&
+                !lowerTr.contains("outcome") &&
+                !lowerTr.contains("achievement") &&
+                !lowerTr.contains("head of the department") &&
                 !lowerTr.contains("kpr college") &&
                 (title == null || title.length() < 4 || !lowerTr.contains(title.toLowerCase())) &&
                 (achievers == null || achievers.length() < 4 || !lowerTr.contains(achievers.toLowerCase().substring(0, 10)))) {
@@ -893,7 +906,12 @@ public class NewsletterGeneratorService {
         }
 
         String fullStory = String.join(" ", para1Sentences) + (para2Sentences.isEmpty() ? "" : " " + String.join(" ", para2Sentences));
-        return fullStory.replaceAll("\\s+", " ").replaceAll("\\s+\\.", ".").trim();
+        return fullStory
+            .replaceAll("(?i)\\b(Outcome\\s*/\\s*Achievement|Outcome of the Event|Head of the Department|Head of Department|HOD|Signature|Staff Coordinator|Faculty Coordinator)\\b[.:\\s]*", " ")
+            .replaceAll("\\s+", " ")
+            .replaceAll("\\s+\\.", ".")
+            .replaceAll("\\.{2,}", ".")
+            .trim();
     }
 
     private boolean isInvalidPerson(String str) {
