@@ -847,22 +847,84 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushState(activeProject.pages);
 
     const oldPages = [...activeProject.pages];
-    const newPageNum = oldPages.length + 1;
-    const newPageId = `page_${newPageNum}_${Date.now()}`;
     const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
 
-    // Create the new blank canvas page with canonical header and footer - leaves all existing pages 100% untouched!
-    const emptyNewPage: Page = {
-      id: newPageId,
-      title: `Page ${newPageNum}`,
-      status: "DRAFT",
-      elements: []
+    // Helper to check if a page is the Editorial Board
+    const isEditorialBoardPage = (p: Page) => {
+      if (p.title === "Editorial Board") return true;
+      if (!p.elements || !Array.isArray(p.elements)) return false;
+      return p.elements.some((el: any) => {
+        const id = (el.id || '').toLowerCase();
+        if (id.includes('ribbon_text') || id.includes('badge_chief') || id.includes('pic_chief') || id.includes('name_chief')) {
+          return true;
+        }
+        if (el.type === 'text' && typeof el.text === 'string' && el.text.trim().toUpperCase() === 'EDITORIAL BOARD') {
+          return true;
+        }
+        return false;
+      });
     };
-    const newPage = ensureCanonicalPageStructure(emptyNewPage, newPageNum, activeProject.department || "Information Technology", currentHeaderDate);
+
+    const editorialIdx = oldPages.findIndex(isEditorialBoardPage);
+
+    let updatedPages: Page[] = [];
+    let newPageId = '';
+
+    if (editorialIdx !== -1) {
+      // Editorial Board exists: ensure extra page is added BEFORE Editorial Board,
+      // and Editorial Board is ALWAYS the last page!
+      const editorialPage = oldPages[editorialIdx];
+      const otherPages = oldPages.filter((_, idx) => idx !== editorialIdx);
+
+      const newPageNum = otherPages.length + 1;
+      newPageId = `page_${newPageNum}_${Date.now()}`;
+
+      const emptyNewPage: Page = {
+        id: newPageId,
+        title: `Page ${newPageNum}`,
+        status: "DRAFT",
+        elements: []
+      };
+      const newPage = ensureCanonicalPageStructure(emptyNewPage, newPageNum, activeProject.department || "Information Technology", currentHeaderDate);
+
+      // Keep Editorial Board as the final page, update its footer page number to the final index
+      const finalEditorialPageNum = otherPages.length + 2;
+      const updatedEditorialElements = (editorialPage.elements || []).map((el: any) => {
+        if (el.id && el.id.includes('footer_text')) {
+          return {
+            ...el,
+            text: `Page ${finalEditorialPageNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`
+          };
+        }
+        return el;
+      });
+
+      const updatedEditorialPage: Page = {
+        ...editorialPage,
+        title: "Editorial Board",
+        elements: updatedEditorialElements
+      };
+
+      updatedPages = [...otherPages, newPage, updatedEditorialPage];
+    } else {
+      // Standard append if no editorial board is present
+      const newPageNum = oldPages.length + 1;
+      newPageId = `page_${newPageNum}_${Date.now()}`;
+
+      const emptyNewPage: Page = {
+        id: newPageId,
+        title: `Page ${newPageNum}`,
+        status: "DRAFT",
+        elements: []
+      };
+      const newPage = ensureCanonicalPageStructure(emptyNewPage, newPageNum, activeProject.department || "Information Technology", currentHeaderDate);
+
+      updatedPages = [...oldPages, newPage];
+    }
 
     const newProject: ProjectData = {
       ...activeProject,
-      pages: [...oldPages, newPage]
+      pages: updatedPages
     };
 
     setActiveProject(newProject);
@@ -914,6 +976,24 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     // Keep all pages except the deleted one, preserving all their elements 100%
     const updatedPages = activeProject.pages.filter(p => p.id !== pageId);
+
+    // If the last page is Editorial Board, keep its footer page number in sync with new total pages
+    const lastPage = updatedPages[updatedPages.length - 1];
+    if (lastPage && (lastPage.title === 'Editorial Board' || lastPage.elements?.some((el: any) => el.id?.includes('ribbon_text') || el.id === 'p8_ribbon_text'))) {
+      const updatedElements = (lastPage.elements || []).map((el: any) => {
+        if (el.id && el.id.includes('footer_text')) {
+          return {
+            ...el,
+            text: `Page ${updatedPages.length} • Official publication of the Department of ${activeProject.department || "Information Technology"}`
+          };
+        }
+        return el;
+      });
+      updatedPages[updatedPages.length - 1] = {
+        ...lastPage,
+        elements: updatedElements
+      };
+    }
 
     const newProject: ProjectData = {
       ...activeProject,

@@ -984,6 +984,10 @@ const ContentWizardPanel: React.FC = () => {
     const targetPage = activeProject.pages[num - 1];
     if (targetPage) {
       setActivePageId(targetPage.id);
+      const pageEl = document.getElementById(targetPage.id);
+      if (pageEl) {
+        pageEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   };
 

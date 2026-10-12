@@ -94,24 +94,55 @@ const CanvasWorkspace: React.FC<{
 
   const workspaceRef = useRef<HTMLDivElement>(null);
 
-  // Stable viewport: do not force programmatic scrollIntoView on activePageId change so user editing remains still and stable
-
-  // Scroll observer: update activePageId when user manually scrolls pages in canvas viewport
+  const isProgrammaticScrollRef = useRef<boolean>(false);
+  const scrollTimeoutRef = useRef<any>(null);
+  const lastManualPageIdRef = useRef<string | null>(null);
   const activePageIdRef = useRef(activePageId);
+
   useEffect(() => {
     activePageIdRef.current = activePageId;
   }, [activePageId]);
 
+  // Programmatic scroll: move canvas to page when user clicks a page number (e.g. 5) or navigates
+  useEffect(() => {
+    if (!activePageId) return;
+
+    // If activePageId was changed by IntersectionObserver during manual scroll, skip programmatic scroll
+    if (lastManualPageIdRef.current === activePageId) {
+      lastManualPageIdRef.current = null;
+      return;
+    }
+
+    isProgrammaticScrollRef.current = true;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+
+    const timer = setTimeout(() => {
+      const pageElement = document.getElementById(activePageId);
+      if (pageElement) {
+        pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+      scrollTimeoutRef.current = setTimeout(() => {
+        isProgrammaticScrollRef.current = false;
+      }, 800);
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [activePageId]);
+
+  // Scroll observer: update activePageId when user manually scrolls pages in canvas viewport
   useEffect(() => {
     const container = workspaceRef.current;
     if (!container || !activeProject?.pages) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (isProgrammaticScrollRef.current) return;
+
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
             const targetId = entry.target.id;
             if (targetId && targetId !== activePageIdRef.current) {
+              lastManualPageIdRef.current = targetId;
               activePageIdRef.current = targetId;
               setActivePageId(targetId);
             }
