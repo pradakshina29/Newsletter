@@ -172,7 +172,16 @@ const PropertiesPanel: React.FC = () => {
             <span>Duplicate</span>
           </button>
           <button
-            onClick={() => deleteElement(el.id)}
+            onClick={() => {
+              const isImage = el.type === 'image';
+              const ok = window.confirm(
+                isImage 
+                  ? "Are you sure you want to delete this uploaded image?" 
+                  : "Are you sure you want to delete this element?"
+              );
+              if (!ok) return;
+              deleteElement(el.id);
+            }}
             className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-bold flex items-center justify-center space-x-1.5 border border-red-200"
           >
             <Trash2 className="w-3.5 h-3.5" />

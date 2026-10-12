@@ -91,28 +91,7 @@ const CanvasWorkspace: React.FC<{
 
   const workspaceRef = useRef<HTMLDivElement>(null);
 
-  const isProgrammaticScrollRef = useRef<boolean>(false);
-  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Auto-scroll active page into view whenever activePageId changes (e.g. working on page 3 or clicking page 4)
-  useEffect(() => {
-    if (!activePageId) return;
-
-    isProgrammaticScrollRef.current = true;
-    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
-
-    const timer = setTimeout(() => {
-      const pageElement = document.getElementById(activePageId);
-      if (pageElement) {
-        pageElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }
-      scrollTimeoutRef.current = setTimeout(() => {
-        isProgrammaticScrollRef.current = false;
-      }, 750);
-    }, 50);
-
-    return () => clearTimeout(timer);
-  }, [activePageId]);
+  // Stable viewport: do not force programmatic scrollIntoView on activePageId change so user editing remains still and stable
 
   // Scroll observer: update activePageId when user manually scrolls pages in canvas viewport
   useEffect(() => {
@@ -121,8 +100,6 @@ const CanvasWorkspace: React.FC<{
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (isProgrammaticScrollRef.current) return;
-
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
             const targetId = entry.target.id;
@@ -205,9 +182,19 @@ const CanvasWorkspace: React.FC<{
           duplicateElement(selectedElementId);
         }
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
-        if (selectedElementId) {
-          e.preventDefault();
-          deleteElement(selectedElementId);
+        if (selectedElementId && activeProject) {
+          const currentEl = activeProject.pages.flatMap(p => p.elements).find(el => el.id === selectedElementId);
+          if (currentEl) {
+            const isImage = currentEl.type === 'image';
+            const ok = window.confirm(
+              isImage 
+                ? "Are you sure you want to delete this uploaded image?" 
+                : "Are you sure you want to delete this element?"
+            );
+            if (!ok) return;
+            e.preventDefault();
+            deleteElement(selectedElementId);
+          }
         }
       }
     };
@@ -792,6 +779,13 @@ const CanvasWorkspace: React.FC<{
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
+                  const isImage = el.type === 'image';
+                  const ok = window.confirm(
+                    isImage 
+                      ? "Are you sure you want to delete this uploaded image?" 
+                      : "Are you sure you want to delete this element?"
+                  );
+                  if (!ok) return;
                   deleteElement(el.id);
                 }}
                 className="px-2 py-0.5 hover:bg-red-600/30 rounded text-red-400 hover:text-red-300 flex items-center space-x-1"

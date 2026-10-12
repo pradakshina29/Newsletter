@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useEditor, ensureCanonicalPageStructure } from '../context/EditorContext';
+import { useEditor, ensureCanonicalPageStructure, safeSaveToLocalStorage } from '../context/EditorContext';
 import { useNotification } from '../context/NotificationContext';
 import { UserSession } from '../types/editor';
 import SidebarTools from './editor/SidebarTools';
@@ -126,11 +126,11 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
 
   const handleCloseAndSave = async () => {
+    const ok = window.confirm("Are you sure you want to return to the Dashboard? All your work will be saved.");
+    if (!ok) return;
     if (activeProject && activeProject.id) {
-      try {
-        localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-        localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+      safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
       await saveProject();
     }
     onClose();
@@ -216,22 +216,36 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       const cachedTimestamp = lastCachedTime ? new Date(lastCachedTime).getTime() : 0;
       const serverTimestamp = serverProject?.updatedAt ? new Date(serverProject.updatedAt).getTime() : 0;
 
+      // Never discard extra pages or uploaded images created in either cache or server
+      let pagesToUse: any[] = [];
+      if (cachedPages.length > serverPages.length) {
+        pagesToUse = cachedPages;
+      } else if (serverPages.length > cachedPages.length) {
+        pagesToUse = serverPages;
+      } else if (cachedScore >= serverScore && cachedPages.length > 0) {
+        pagesToUse = cachedPages;
+      } else if (serverPages.length > 0) {
+        pagesToUse = serverPages;
+      } else if (cachedPages.length > 0) {
+        pagesToUse = cachedPages;
+      }
+
       let projectToUse: any = null;
 
       if (cachedProject && (hasExtraPagesInCache || cachedTimestamp >= serverTimestamp || cachedScore >= serverScore || serverPages.length === 0)) {
         projectToUse = {
           ...cachedProject,
-          pages: cachedPages.length > 0 ? cachedPages : (serverPages.length > 0 ? serverPages : []),
+          pages: pagesToUse,
           id: projectId
         };
       } else if (serverProject) {
         projectToUse = {
           ...serverProject,
-          pages: serverPages,
+          pages: pagesToUse.length > 0 ? pagesToUse : serverPages,
           id: projectId
         };
       } else if (cachedProject) {
-        projectToUse = { ...cachedProject, id: projectId };
+        projectToUse = { ...cachedProject, pages: pagesToUse, id: projectId };
       }
 
       if (!projectToUse) {
@@ -336,143 +350,17 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
             }
             parsedProject.pages = defaultPages;
           } else if (parsedProject.pages.length > 0) {
-            const deptUpper = (parsedProject.department || "Information Technology").toUpperCase();
-            const lastIdx = parsedProject.pages.length - 1;
-            const currentHeaderDate = (parsedProject.pages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
-
-            // Extract existing editorial board values (chief name, role, co name, role, pics)
-            let chiefName = "DR. S. SRIVIDHYA";
-            let chiefRole = "ASSOCIATE PROFESSOR AND HEAD";
-            let chiefPic = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80";
-
-            let coName = "MR. AKHIL K M";
-            let coRole = "ASSISTANT PROFESSOR";
-            let coPic = "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80";
-
-            parsedProject.pages.forEach((p: any) => {
-              if (p.elements) {
-                p.elements.forEach((el: any) => {
-                  if ((el.id?.includes('name_chief') || el.id === 'p8_name_chief') && el.text) chiefName = el.text;
-                  if ((el.id?.includes('desig_chief') || el.id === 'p8_desig_chief') && el.text) chiefRole = el.text;
-                  if ((el.id?.includes('pic_chief') || el.id === 'p8_pic_chief') && el.url) chiefPic = el.url;
-                  if ((el.id?.includes('name_co') || el.id === 'p8_name_co') && el.text) coName = el.text;
-                  if ((el.id?.includes('desig_co') || el.id === 'p8_desig_co') && el.text) coRole = el.text;
-                  if ((el.id?.includes('pic_co') || el.id === 'p8_pic_co') && el.url) coPic = el.url;
-                });
-              }
-            });
-
+            // Respect and preserve 100% of the user's saved pages and uploaded elements!
+            // Do not delete, strip, or replace any page elements.
             parsedProject.pages = parsedProject.pages.map((page: any, idx: number) => {
               const pNum = idx + 1;
-              const isLast = idx === lastIdx;
-              const hasRibbon = page.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
-
-              if (isLast) {
-                page.title = "Editorial Board";
-                if (!hasRibbon) {
-                  page.elements = [
-                    { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-                    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-                    { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-                    { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-
-                    { id: `p${pNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
-                    { id: `p${pNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
-
-                    { id: `p${pNum}_badge_chief_bg`, type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                    { id: `p${pNum}_badge_chief_text`, type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_pic_chief`, type: "image", x: 135, y: 340, width: 180, height: 180, url: chiefPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-                    { id: `p${pNum}_name_chief`, type: "text", x: 50, y: 540, width: 350, height: 25, text: chiefName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                    { id: `p${pNum}_desig_chief`, type: "text", x: 50, y: 565, width: 350, height: 20, text: chiefRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pNum}_dept_chief`, type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-                    { id: `p${pNum}_badge_co_bg`, type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                    { id: `p${pNum}_badge_co_text`, type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_pic_co`, type: "image", x: 485, y: 340, width: 180, height: 180, url: coPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-                    { id: `p${pNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: coName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                    { id: `p${pNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-                    { id: `p${pNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-                    { id: `p${pNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-                    { id: `p${pNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
-
-                    { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-                  ];
-                }
-              } else {
-                // If an intermediate page has Editorial Board elements (e.g. Page 8 when total pages = 13), strip the editorial board widgets while preserving user elements
-                if (hasRibbon) {
-                  page.title = `Page ${pNum}`;
-                  const editorialIds = ['_ribbon_bg', '_ribbon_text', '_badge_chief', '_badge_co', '_pic_chief', '_name_chief', '_desig_chief', '_dept_chief', '_pic_co', '_name_co', '_desig_co', '_dept_co', '_line_div', '_diamond_div'];
-                  const remainingElements = (page.elements || []).filter((el: any) => {
-                    const id = el.id || '';
-                    return !editorialIds.some(key => id.includes(key));
-                  });
-                  // If page has no elements remaining other than background/header, ensure standard header is present
-                  if (remainingElements.length <= 1) {
-                    page.elements = [
-                      { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                      { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-                      { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                      { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                      { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-                      { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                      { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-                      { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                      { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-                      { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-                    ];
-                  } else {
-                    page.elements = remainingElements;
-                  }
-                }
-              }
-              return page;
+              return {
+                ...page,
+                id: page.id || `page_${pNum}`,
+                title: page.title || `Page ${pNum}`,
+                elements: Array.isArray(page.elements) ? page.elements : []
+              };
             });
-
-            // Ensure Page 1 has properly aligned logos and campus image
-            const p1 = parsedProject.pages[0];
-            const hasKprLogo = p1.elements.some((el: any) => el.id === 'p1_kprcas_logo');
-            if (!hasKprLogo) {
-              p1.elements.push(
-                { id: "p1_kprcas_logo", type: "image", x: 50, y: 200, width: 330, height: 100, url: "/assets/kprcas_logo.jpg", borderRadius: 0, objectFit: "contain" },
-                { id: "p1_launchit_logo", type: "image", x: 420, y: 200, width: 330, height: 100, url: "/assets/launchit_logo.jpg", borderRadius: 0, objectFit: "contain" },
-                { id: "p1_school_text", type: "text", x: 50, y: 315, width: 700, height: 25, text: "SCHOOL OF COMPUTING SCIENCE", fontSize: 15, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center", letterSpacing: 1.0 },
-                { id: "p1_dept_text", type: "text", x: 50, y: 345, width: 700, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 14, fontFamily: "Poppins", color: "#475569", bold: true, align: "center", letterSpacing: 1.0 },
-                { id: "p1_cover_img", type: "image", x: 50, y: 380, width: 700, height: 575, url: "/assets/kprcas_campus.png", borderRadius: 12, shadow: "lg", objectFit: "cover" },
-                { id: "p1_cover_caption", type: "text", x: 50, y: 970, width: 700, height: 20, text: "KPRCAS Main Campus • Official Department Newsletter Cover Page", fontSize: 9, fontFamily: "Poppins", color: "#64748b", italic: true, align: "center" }
-              );
-            } else {
-              // Update existing logo element dimensions & objectFit
-              p1.elements = p1.elements.map((el: any) => {
-                if (el.id === 'p1_kprcas_logo') {
-                  return { ...el, x: 50, y: 200, width: 330, height: 100, objectFit: 'contain', url: '/assets/kprcas_logo.jpg' };
-                }
-                if (el.id === 'p1_launchit_logo') {
-                  return { ...el, x: 420, y: 200, width: 330, height: 100, objectFit: 'contain', url: '/assets/launchit_logo.jpg' };
-                }
-                if (el.id === 'p1_school_text') {
-                  return { ...el, x: 50, y: 315, width: 700, height: 25 };
-                }
-                if (el.id === 'p1_dept_text') {
-                  return { ...el, x: 50, y: 345, width: 700, height: 25 };
-                }
-                if (el.id === 'p1_cover_img') {
-                  return { ...el, x: 50, y: 380, width: 700, height: 575, url: '/assets/kprcas_campus.png', borderRadius: 12 };
-                }
-                if (el.id === 'p1_cover_caption') {
-                  return { ...el, x: 50, y: 970, width: 700, height: 20 };
-                }
-                return el;
-              });
-            }
           }
           if (!parsedProject.canvasWidth) parsedProject.canvasWidth = 800;
           if (!parsedProject.canvasHeight) parsedProject.canvasHeight = 1130;
@@ -1202,8 +1090,12 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                   <button
                     onClick={() => {
                       if (activeProject && activeProject.pages.length <= 1) {
+                        showWarning("Newsletter must have at least 1 page.", "Delete Page");
                         return;
                       }
+                      const pageNum = (activeProject?.pages.findIndex(p => p.id === activePageId) ?? -1) + 1;
+                      const confirmed = window.confirm(`Are you sure you want to delete Page ${pageNum}? All content and uploaded images on this page will be removed.`);
+                      if (!confirmed) return;
                       deletePage(activePageId);
                     }}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-red-600/10"

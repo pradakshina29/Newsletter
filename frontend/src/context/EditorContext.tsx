@@ -99,10 +99,9 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
     );
   });
 
-  // If this is a cover page, an editorial page, or an EXTRA page (pNum > 8 or user-created page),
-  // PRESERVE ALL user elements completely without flattening into a single-article template!
+  // PRESERVE ALL user elements and uploaded content completely without flattening, dropping, or altering them!
   const isExtraPage = pNum > 8 || (page.id?.startsWith('page_') && !['page_1', 'page_2', 'page_3', 'page_4', 'page_5', 'page_6', 'page_7', 'page_8'].includes(page.id));
-  if (isCoverPage || isEditorialPage || isExtraPage) {
+  if (nonHeaderElements.length > 0 || isCoverPage || isEditorialPage || isExtraPage) {
     return {
       ...page,
       elements: [
@@ -500,7 +499,14 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    window.addEventListener('beforeunload', handleImmediateSave);
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      handleImmediateSave();
+      e.preventDefault();
+      e.returnValue = 'Are you sure you want to leave? Your newsletter changes are saved.';
+      return e.returnValue;
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') {
         handleImmediateSave();
@@ -508,7 +514,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     return () => {
-      window.removeEventListener('beforeunload', handleImmediateSave);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleImmediateSave);
     };
   }, [activeProject, saveProject]);
@@ -838,112 +844,26 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const oldPages = [...activeProject.pages];
     const newPageNum = oldPages.length + 1;
     const newPageId = `page_${newPageNum}_${Date.now()}`;
-    const deptUpper = (activeProject.department || "Information Technology").toUpperCase();
-
-    // Preserve existing editorial board field values if available
-    let chiefName = "DR. S. SRIVIDHYA";
-    let chiefRole = "ASSOCIATE PROFESSOR AND HEAD";
-    let chiefPic = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80";
-
-    let coName = "MR. AKHIL K M";
-    let coRole = "ASSISTANT PROFESSOR";
-    let coPic = "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80";
-
-    oldPages.forEach((p) => {
-      if (p.elements) {
-        p.elements.forEach((el: any) => {
-          if ((el.id?.includes('name_chief') || el.id === 'p8_name_chief') && el.text) chiefName = el.text;
-          if ((el.id?.includes('desig_chief') || el.id === 'p8_desig_chief') && el.text) chiefRole = el.text;
-          if ((el.id?.includes('pic_chief') || el.id === 'p8_pic_chief') && el.url) chiefPic = el.url;
-          if ((el.id?.includes('name_co') || el.id === 'p8_name_co') && el.text) coName = el.text;
-          if ((el.id?.includes('desig_co') || el.id === 'p8_desig_co') && el.text) coRole = el.text;
-          if ((el.id?.includes('pic_co') || el.id === 'p8_pic_co') && el.url) coPic = el.url;
-        });
-      }
-    });
-
-    // Clean previous last page if it had Editorial Board elements, preserving user content
     const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
 
-    const updatedOldPages = oldPages.map((p, idx) => {
-      const pNum = idx + 1;
-      const hasRibbon = p.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
-      if (hasRibbon) {
-        const editorialIds = ['_ribbon_bg', '_ribbon_text', '_badge_chief', '_badge_co', '_pic_chief', '_name_chief', '_desig_chief', '_dept_chief', '_pic_co', '_name_co', '_desig_co', '_dept_co', '_line_div', '_diamond_div'];
-        const remainingElements = (p.elements || []).filter((el: any) => {
-          const id = el.id || '';
-          return !editorialIds.some(key => id.includes(key));
-        });
-        const elementsToUse = remainingElements.length > 1 ? remainingElements : [
-          { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-          { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-          { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-          { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-          { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-          { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-          { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-          { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-          { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-          { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-        ];
-        return {
-          ...p,
-          title: `Page ${pNum}`,
-          elements: elementsToUse
-        };
-      }
-      return p;
-    });
-
-    // Construct the new LAST PAGE with Editorial Board elements
-    const newEditorialPage: Page = {
+    // Create the new blank canvas page with canonical header and footer - leaves all existing pages 100% untouched!
+    const emptyNewPage: Page = {
       id: newPageId,
-      title: "Editorial Board",
+      title: `Page ${newPageNum}`,
       status: "DRAFT",
-      elements: [
-        { id: `p${newPageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-        { id: `p${newPageNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-        { id: `p${newPageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-        { id: `p${newPageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-        { id: `p${newPageNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-        { id: `p${newPageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-        { id: `p${newPageNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-        { id: `p${newPageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-        { id: `p${newPageNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-
-        { id: `p${newPageNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
-        { id: `p${newPageNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
-
-        { id: `p${newPageNum}_badge_chief_bg`, type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-        { id: `p${newPageNum}_badge_chief_text`, type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-        { id: `p${newPageNum}_pic_chief`, type: "image", x: 135, y: 340, width: 180, height: 180, url: chiefPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-        { id: `p${newPageNum}_name_chief`, type: "text", x: 50, y: 540, width: 350, height: 25, text: chiefName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-        { id: `p${newPageNum}_desig_chief`, type: "text", x: 50, y: 565, width: 350, height: 20, text: chiefRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-        { id: `p${newPageNum}_dept_chief`, type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-        { id: `p${newPageNum}_badge_co_bg`, type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-        { id: `p${newPageNum}_badge_co_text`, type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-        { id: `p${newPageNum}_pic_co`, type: "image", x: 485, y: 340, width: 180, height: 180, url: coPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-        { id: `p${newPageNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: coName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-        { id: `p${newPageNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-        { id: `p${newPageNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-        { id: `p${newPageNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-        { id: `p${newPageNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-        { id: `p${newPageNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-        { id: `p${newPageNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
-
-        { id: `p${newPageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${newPageNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-      ] as CanvasElement[]
+      elements: []
     };
+    const newPage = ensureCanonicalPageStructure(emptyNewPage, newPageNum, activeProject.department || "Information Technology", currentHeaderDate);
 
     const newProject: ProjectData = {
       ...activeProject,
-      pages: [...updatedOldPages, newEditorialPage] as Page[]
+      pages: [...oldPages, newPage]
     };
 
     setActiveProject(newProject);
     setActivePageId(newPageId);
+    safeSaveToLocalStorage(`local_project_${newProject.id}`, JSON.stringify(newProject));
+    safeSaveToLocalStorage(`last_autosaved_${newProject.id}`, new Date().toISOString());
     saveProject(newProject);
   };
 
@@ -991,88 +911,17 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     pushState(activeProject.pages);
 
-    const oldPages = activeProject.pages.filter(p => p.id !== pageId);
-    const deptUpper = (activeProject.department || "Information Technology").toUpperCase();
-    const lastIdx = oldPages.length - 1;
-
-    // Preserve existing editorial board field values if available
-    let chiefName = "DR. S. SRIVIDHYA";
-    let chiefRole = "ASSOCIATE PROFESSOR AND HEAD";
-    let chiefPic = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80";
-
-    let coName = "MR. AKHIL K M";
-    let coRole = "ASSISTANT PROFESSOR";
-    let coPic = "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80";
-
-    oldPages.forEach((p) => {
-      if (p.elements) {
-        p.elements.forEach((el: any) => {
-          if ((el.id?.includes('name_chief') || el.id === 'p8_name_chief') && el.text) chiefName = el.text;
-          if ((el.id?.includes('desig_chief') || el.id === 'p8_desig_chief') && el.text) chiefRole = el.text;
-          if ((el.id?.includes('pic_chief') || el.id === 'p8_pic_chief') && el.url) chiefPic = el.url;
-          if ((el.id?.includes('name_co') || el.id === 'p8_name_co') && el.text) coName = el.text;
-          if ((el.id?.includes('desig_co') || el.id === 'p8_desig_co') && el.text) coRole = el.text;
-          if ((el.id?.includes('pic_co') || el.id === 'p8_pic_co') && el.url) coPic = el.url;
-        });
-      }
-    });
-
-    const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
-
-    const updatedPages = oldPages.map((page, idx) => {
-      const pNum = idx + 1;
-      const isLast = idx === lastIdx;
-      const hasRibbon = page.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
-
-      if (isLast) {
-        page.title = "Editorial Board";
-        if (!hasRibbon) {
-          page.elements = [
-            { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-            { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-            { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-            { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-            { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-
-            { id: `p${pNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
-            { id: `p${pNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
-
-            { id: `p${pNum}_badge_chief_bg`, type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-            { id: `p${pNum}_badge_chief_text`, type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-            { id: `p${pNum}_pic_chief`, type: "image", x: 135, y: 340, width: 180, height: 180, url: chiefPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-            { id: `p${pNum}_name_chief`, type: "text", x: 50, y: 540, width: 350, height: 25, text: chiefName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-            { id: `p${pNum}_desig_chief`, type: "text", x: 50, y: 565, width: 350, height: 20, text: chiefRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-            { id: `p${pNum}_dept_chief`, type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-            { id: `p${pNum}_badge_co_bg`, type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-            { id: `p${pNum}_badge_co_text`, type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-            { id: `p${pNum}_pic_co`, type: "image", x: 485, y: 340, width: 180, height: 180, url: coPic, borderRadius: 90, shadow: "md", objectFit: "cover" },
-            { id: `p${pNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: coName, fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-            { id: `p${pNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-            { id: `p${pNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-
-            { id: `p${pNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
-            { id: `p${pNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-            { id: `p${pNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
-            { id: `p${pNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
-
-            { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-          ] as CanvasElement[];
-        }
-      }
-      return page;
-    });
+    // Keep all pages except the deleted one, preserving all their elements 100%
+    const updatedPages = activeProject.pages.filter(p => p.id !== pageId);
 
     const newProject: ProjectData = {
       ...activeProject,
-      pages: updatedPages as Page[]
+      pages: updatedPages
     };
 
     setActiveProject(newProject);
+    safeSaveToLocalStorage(`local_project_${newProject.id}`, JSON.stringify(newProject));
+    safeSaveToLocalStorage(`last_autosaved_${newProject.id}`, new Date().toISOString());
     saveProject(newProject);
 
     // Reset active page ID safely
