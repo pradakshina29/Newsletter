@@ -97,6 +97,11 @@ const CanvasWorkspace: React.FC<{
   // Stable viewport: do not force programmatic scrollIntoView on activePageId change so user editing remains still and stable
 
   // Scroll observer: update activePageId when user manually scrolls pages in canvas viewport
+  const activePageIdRef = useRef(activePageId);
+  useEffect(() => {
+    activePageIdRef.current = activePageId;
+  }, [activePageId]);
+
   useEffect(() => {
     const container = workspaceRef.current;
     if (!container || !activeProject?.pages) return;
@@ -106,7 +111,8 @@ const CanvasWorkspace: React.FC<{
         entries.forEach((entry) => {
           if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
             const targetId = entry.target.id;
-            if (targetId && targetId !== activePageId) {
+            if (targetId && targetId !== activePageIdRef.current) {
+              activePageIdRef.current = targetId;
               setActivePageId(targetId);
             }
           }
@@ -126,7 +132,7 @@ const CanvasWorkspace: React.FC<{
     });
 
     return () => observer.disconnect();
-  }, [activeProject?.pages, activePageId, setActivePageId]);
+  }, [activeProject?.pages?.length, setActivePageId]);
   
   // Dragging & Resizing States
   const [dragState, setDragState] = useState<{
@@ -864,8 +870,9 @@ const CanvasWorkspace: React.FC<{
       >
         {(activeProject.pages || []).map((page, index) => {
           const isActive = page.id === activePageId;
-          const canonicalPage = ensureCanonicalPageStructure(page, index + 1, activeProject.department || "Information Technology");
-          const pageElements = canonicalPage.elements || [];
+          const pageElements = (page.elements && page.elements.length > 0)
+            ? page.elements
+            : (ensureCanonicalPageStructure(page, index + 1, activeProject.department || "Information Technology").elements || []);
           return (
             <div
               key={page.id || index}

@@ -1,5 +1,6 @@
 import * as pdfjsLib from 'pdfjs-dist';
 import JSZip from 'jszip';
+import { optimizeBase64Image } from './imageOptimizer';
 
 // Ensure PDF worker is initialized gracefully with cross-origin Blob URL fallback
 try {
@@ -311,7 +312,13 @@ export async function extractDocumentContent(file: File): Promise<ExtractedDocum
         for (const item of mediaList) {
           const ext = item.path.split('.').pop()?.toLowerCase() || 'jpeg';
           const mimeType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-          extractedImages.push(`data:${mimeType};base64,${item.base64}`);
+          const rawDataUrl = `data:${mimeType};base64,${item.base64}`;
+          try {
+            const optimized = await optimizeBase64Image(rawDataUrl, 1200, 1200, 0.82);
+            extractedImages.push(optimized);
+          } catch (_) {
+            extractedImages.push(rawDataUrl);
+          }
         }
 
         // Collect all XML text files in the DOCX package

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserSession, ProjectData } from '../types/editor';
 import { useNotification } from '../context/NotificationContext';
+import { saveProjectToIndexedDB } from '../utils/projectStorage';
 import { Plus, Search, LogOut, FileText, Bell, CheckCircle, RefreshCw, Sparkles, Shield, Edit, Edit3, Eye, Save, Layers, Copy, Trash2, Folder, ExternalLink, Sun, Moon } from 'lucide-react';
 
 interface DashboardProps {
@@ -348,8 +349,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
           theme: { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#EFEFEF' },
           pages: pagesObj
         };
-        localStorage.setItem(`local_project_${created.id}`, JSON.stringify(fullProj));
-        localStorage.setItem(`last_autosaved_${created.id}`, new Date().toISOString());
+        saveProjectToIndexedDB(fullProj as any).catch(() => {});
+        try {
+          localStorage.setItem(`local_project_${created.id}`, JSON.stringify(fullProj));
+          localStorage.setItem(`last_autosaved_${created.id}`, new Date().toISOString());
+        } catch (_) {}
 
         setShowCreateModal(false);
         setNewProjectName('');
@@ -362,7 +366,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
 
     // Fallback local creation so project creation never fails
     const localId = Date.now();
-    const localProject = {
+    const localProject: any = {
       id: localId,
       name: newProjectName,
       category: 'Academic',
@@ -372,7 +376,10 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
       content: blankContent,
       ownerName: user?.name || 'KPRCAS Editorial Team'
     };
-    localStorage.setItem(`local_project_${localId}`, JSON.stringify(localProject));
+    saveProjectToIndexedDB(localProject).catch(() => {});
+    try {
+      localStorage.setItem(`local_project_${localId}`, JSON.stringify(localProject));
+    } catch (_) {}
     setShowCreateModal(false);
     setNewProjectName('');
     onEditProject(localId);
@@ -676,8 +683,11 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
           theme: template.theme || { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#EFEFEF' },
           pages: pagesObj
         };
-        localStorage.setItem(`local_project_${created.id}`, JSON.stringify(fullLocalProj));
-        localStorage.setItem(`last_autosaved_${created.id}`, new Date().toISOString());
+        saveProjectToIndexedDB(fullLocalProj as any).catch(() => {});
+        try {
+          localStorage.setItem(`local_project_${created.id}`, JSON.stringify(fullLocalProj));
+          localStorage.setItem(`last_autosaved_${created.id}`, new Date().toISOString());
+        } catch (_) {}
         onEditProject(created.id);
         return;
       } else {

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useEditor, ensureCanonicalPageStructure, safeSaveToLocalStorage } from '../context/EditorContext';
+import { loadProjectFromIndexedDB, saveProjectToIndexedDB } from '../utils/projectStorage';
 import { useNotification } from '../context/NotificationContext';
 import { UserSession } from '../types/editor';
 import SidebarTools from './editor/SidebarTools';
@@ -127,20 +128,40 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
   const handleCloseAndSave = async () => {
     if (activeProject && activeProject.id) {
-      safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-      safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+      await saveProjectToIndexedDB(activeProject);
+      try {
+        safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+        safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+      } catch (_) {}
       await saveProject();
     }
     onClose();
   };
 
-  // Load project from API or LocalStorage on mount
+  // Load project from IndexedDB, LocalStorage, or API on mount
   useEffect(() => {
     const fetchProject = async () => {
       setLoading(true);
       let serverProject: any = null;
       let cachedProject: any = null;
+      let idbProject: any = null;
 
+      // 1. Check IndexedDB first (resilient against 5MB quota limits)
+      try {
+        idbProject = await loadProjectFromIndexedDB(projectId);
+      } catch (idbErr) {
+        console.warn("IndexedDB load offline:", idbErr);
+      }
+
+      // 2. Check localStorage cache
+      const cached = localStorage.getItem(`local_project_${projectId}`);
+      if (cached) {
+        try {
+          cachedProject = JSON.parse(cached);
+        } catch (e) {}
+      }
+
+      // 3. Check server API
       try {
         const response = await fetch(`/api/projects/${projectId}`, {
           headers: { 'Authorization': `Bearer ${user.token || 'default_admin_token'}` }
@@ -153,110 +174,94 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         console.warn("Backend project fetch offline, checking local cache:", err);
       }
 
-      // Check localStorage cache
-      const cached = localStorage.getItem(`local_project_${projectId}`);
-      if (cached) {
-        try {
-          cachedProject = JSON.parse(cached);
-        } catch (e) {}
-      }
-
-      // Extract and parse server pages
-      let serverPages: any[] = [];
-      if (serverProject) {
-        if (Array.isArray(serverProject.pages) && serverProject.pages.length > 0) {
-          serverPages = serverProject.pages;
-        } else if (typeof serverProject.content === 'string' && serverProject.content) {
+      // Helper to extract and parse pages array from any format
+      const extractPages = (proj: any): any[] => {
+        if (!proj) return [];
+        if (Array.isArray(proj.pages) && proj.pages.length > 0) return proj.pages;
+        if (typeof proj.content === 'string' && proj.content) {
           try {
-            const parsed = JSON.parse(serverProject.content);
-            if (Array.isArray(parsed.pages)) serverPages = parsed.pages;
+            const parsed = JSON.parse(proj.content);
+            if (Array.isArray(parsed.pages)) return parsed.pages;
           } catch (e) {}
         }
-      }
+        return [];
+      };
 
-      // Extract and parse cached pages
-      let cachedPages: any[] = [];
-      if (cachedProject) {
-        if (Array.isArray(cachedProject.pages) && cachedProject.pages.length > 0) {
-          cachedPages = cachedProject.pages;
-        } else if (typeof cachedProject.content === 'string' && cachedProject.content) {
-          try {
-            const parsed = JSON.parse(cachedProject.content);
-            if (Array.isArray(parsed.pages)) cachedPages = parsed.pages;
-          } catch (e) {}
-        }
-      }
+      const serverPages = extractPages(serverProject);
+      const cachedPages = extractPages(cachedProject);
+      const idbPages = extractPages(idbProject);
 
-      // Helper to count non-default user content
-      const countUserContent = (pages: any[]) => {
+      // Helper to evaluate non-boilerplate user content on a specific page
+      const countPageUserContent = (page: any) => {
+        if (!page || !Array.isArray(page.elements)) return 0;
         let count = 0;
-        pages.forEach((p) => {
-          (p.elements || []).forEach((el: any) => {
-            const id = el.id || '';
-            if (id.includes('_title') || id.includes('_text') || id.includes('_img') || id.includes('_sub_title') || el.type === 'image' || el.type === 'text') {
-              if (el.text && el.text.length > 15 && !el.text.includes('CTRL+READ') && !el.text.includes('DEPARTMENT OF') && !el.text.includes('NEWS LETTER')) {
-                count += el.text.length;
-              } else if (el.type === 'image' && el.url && !el.url.includes('unsplash.com')) {
-                count += 50;
+        page.elements.forEach((el: any) => {
+          const id = (el.id || '').toLowerCase();
+          const isHeaderOrFooter = id.includes('hdr') || id.includes('footer') || id.includes('bg');
+          if (!isHeaderOrFooter) {
+            if (el.type === 'text' && el.text) {
+              const txt = el.text.trim();
+              if (txt.length > 15 && !txt.includes('CTRL+READ') && !txt.includes('DEPARTMENT OF') && !txt.includes('NEWS LETTER')) {
+                count += txt.length;
               }
+            } else if (el.type === 'image' && el.url) {
+              count += 100;
+            } else {
+              count += 20;
             }
-          });
+          }
         });
         return count;
       };
 
-      const serverScore = countUserContent(serverPages);
-      const cachedScore = countUserContent(cachedPages);
+      // Smart Merge Page-by-Page:
+      // NEVER DROP AN EDITED PAGE! For every page index, choose the candidate with the richest content.
+      const maxPagesCount = Math.max(serverPages.length, cachedPages.length, idbPages.length, 8);
+      const mergedPages: any[] = [];
 
-      // Determine if cachedProject has more pages or has recent content
-      const hasExtraPagesInCache = cachedPages.length > serverPages.length;
-      const lastCachedTime = localStorage.getItem(`last_autosaved_${projectId}`);
-      const cachedTimestamp = lastCachedTime ? new Date(lastCachedTime).getTime() : 0;
-      const serverTimestamp = serverProject?.updatedAt ? new Date(serverProject.updatedAt).getTime() : 0;
+      for (let i = 0; i < maxPagesCount; i++) {
+        const serverP = serverPages[i];
+        const cachedP = cachedPages[i];
+        const idbP = idbPages[i];
 
-      // Never discard extra pages or uploaded images created in either cache or server
-      let pagesToUse: any[] = [];
-      if (cachedPages.length > serverPages.length) {
-        pagesToUse = cachedPages;
-      } else if (serverPages.length > cachedPages.length) {
-        pagesToUse = serverPages;
-      } else if (cachedScore >= serverScore && cachedPages.length > 0) {
-        pagesToUse = cachedPages;
-      } else if (serverPages.length > 0) {
-        pagesToUse = serverPages;
-      } else if (cachedPages.length > 0) {
-        pagesToUse = cachedPages;
+        const scoreServer = countPageUserContent(serverP);
+        const scoreCached = countPageUserContent(cachedP);
+        const scoreIdb = countPageUserContent(idbP);
+
+        let chosenPage = idbP || cachedP || serverP;
+        if (scoreIdb >= scoreCached && scoreIdb >= scoreServer && idbP) {
+          chosenPage = idbP;
+        } else if (scoreCached >= scoreServer && scoreCached >= scoreIdb && cachedP) {
+          chosenPage = cachedP;
+        } else if (scoreServer >= scoreCached && scoreServer >= scoreIdb && serverP) {
+          chosenPage = serverP;
+        }
+
+        if (chosenPage) {
+          mergedPages.push({
+            ...chosenPage,
+            id: chosenPage.id || `page_${i + 1}`,
+            title: chosenPage.title || `Page ${i + 1}`,
+            elements: Array.isArray(chosenPage.elements) ? chosenPage.elements : []
+          });
+        }
       }
 
-      let projectToUse: any = null;
+      // Pick base project metadata
+      let baseProject = idbProject || cachedProject || serverProject || {
+        id: projectId,
+        name: "Academic Newsletter",
+        category: "Academic",
+        department: user?.department || "Information Technology",
+        status: "DRAFT",
+        isTemplate: false
+      };
 
-      if (cachedProject && (hasExtraPagesInCache || cachedTimestamp >= serverTimestamp || cachedScore >= serverScore || serverPages.length === 0)) {
-        projectToUse = {
-          ...cachedProject,
-          pages: pagesToUse,
-          id: projectId
-        };
-      } else if (serverProject) {
-        projectToUse = {
-          ...serverProject,
-          pages: pagesToUse.length > 0 ? pagesToUse : serverPages,
-          id: projectId
-        };
-      } else if (cachedProject) {
-        projectToUse = { ...cachedProject, pages: pagesToUse, id: projectId };
-      }
-
-      if (!projectToUse) {
-        projectToUse = {
-          id: projectId,
-          name: "Academic Newsletter",
-          category: "Academic",
-          department: user?.department || "Information Technology",
-          status: "DRAFT",
-          isTemplate: false,
-          content: null
-        };
-      }
+      let projectToUse: any = {
+        ...baseProject,
+        id: projectId,
+        pages: mergedPages
+      };
 
       try {
         let parsedProject = { ...projectToUse };

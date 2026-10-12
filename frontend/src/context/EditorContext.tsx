@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect, useRef, useCallback } from 'react';
 import { ProjectData, Page, CanvasElement, ElementType, ThemeConfig, TextElement, ImageElement, ShapeElement, QrCodeElement, TableElement, DividerElement } from '../types/editor';
+import { saveProjectToIndexedDB } from '../utils/projectStorage';
 
 interface EditorContextType {
   activeProject: ProjectData | null;
@@ -92,7 +93,7 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const nonHeaderElements = elements.filter((el: any) => {
     const id = (el.id || '').toLowerCase();
     return !(
-      id === `p${pNum}_bg` || id.endsWith('_bg') ||
+      id === `p${pNum}_bg` || id === 'page_bg' || id === 'canvas_bg' ||
       id.includes('dept_hdr') || id.includes('date_hdr') ||
       id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text') ||
       id.includes('meta_line') || id.includes('line_hdr')
@@ -332,6 +333,10 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
 
 export const safeSaveToLocalStorage = (key: string, value: string) => {
   try {
+    // If value exceeds safe local storage capacity (3.5MB), don't risk quota exception
+    if (value.length > 3.5 * 1024 * 1024) {
+      return;
+    }
     localStorage.setItem(key, value);
   } catch (e: any) {
     if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
@@ -346,7 +351,7 @@ export const safeSaveToLocalStorage = (key: string, value: string) => {
         keysToRemove.forEach(k => localStorage.removeItem(k));
         localStorage.setItem(key, value);
       } catch (err2) {
-        console.warn('LocalStorage quota limit reached:', err2);
+        // Quota safely handled
       }
     }
   }
@@ -384,7 +389,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const serialized = JSON.stringify(stateObj);
       setUndoStack(prev => {
         if (prev.length > 0 && prev[prev.length - 1] === serialized) return prev;
-        return [...prev, serialized].slice(-10); // Max history size 10 to prevent memory bloat
+        return [...prev, serialized].slice(-5); // Max history size 5 to prevent memory bloat and browser freezes
       });
       setRedoStack([]);
     } catch (e) {
@@ -405,8 +410,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setActiveProject(normalizedProject);
     if (normalizedProject.id) {
-      safeSaveToLocalStorage(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
-      safeSaveToLocalStorage(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
+      saveProjectToIndexedDB(normalizedProject).catch(() => {});
+      try {
+        safeSaveToLocalStorage(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
+        safeSaveToLocalStorage(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
+      } catch (_) {}
     }
     if (normalizedProject.pages && normalizedProject.pages.length > 0) {
       setActivePageId(prev => {
@@ -418,14 +426,19 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     setRedoStack([]);
   }, []);
 
-  // Save project back to server & local cache
+  // Save project back to server & local storage + IndexedDB
   const saveProject = useCallback(async (projectToSave?: ProjectData) => {
     const proj = projectToSave || activeProject;
     if (!proj || !proj.id) return;
 
-    // Immediately cache to localStorage with quota-safe protection
-    safeSaveToLocalStorage(`local_project_${proj.id}`, JSON.stringify(proj));
-    safeSaveToLocalStorage(`last_autosaved_${proj.id}`, new Date().toISOString());
+    // Immediately cache to IndexedDB (asynchronous & safe from 5MB quota)
+    saveProjectToIndexedDB(proj).catch(err => console.warn('IndexedDB save warning:', err));
+
+    // Also cache to localStorage with quota-safe protection
+    try {
+      safeSaveToLocalStorage(`local_project_${proj.id}`, JSON.stringify(proj));
+      safeSaveToLocalStorage(`last_autosaved_${proj.id}`, new Date().toISOString());
+    } catch (_) {}
 
     const authToken = token || localStorage.getItem('token') || 'default_admin_token';
     
@@ -433,7 +446,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const response = await fetch(`/api/projects/${proj.id}`, {
         method: 'PUT',
-        keepalive: true,
+        // Note: NEVER use keepalive: true here because keepalive limits total body size to 64KB in Chromium!
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
@@ -458,16 +471,19 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.warn('Cloud save response status:', response.status);
       }
     } catch (e) {
-      console.error('Cloud Save error:', e);
+      console.warn('Cloud Save offline or queued:', e);
     } finally {
       setIsSaving(false);
     }
   }, [activeProject, token]);
 
-  // Fast Responsive Autosave (Immediate local cache on every edit + 1s debounced cloud save)
+  // Fast Responsive Autosave (Immediate IndexedDB sync on every edit + debounced cloud save)
   useEffect(() => {
     if (!activeProject || !activeProject.id) return;
     
+    // Always immediately sync to IndexedDB (never fails on 5MB quota)
+    saveProjectToIndexedDB(activeProject).catch(() => {});
+
     const currentSerialized = JSON.stringify({
       name: activeProject.name,
       pages: activeProject.pages,
@@ -475,9 +491,10 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       department: activeProject.department
     });
 
-    // Always immediately sync to local storage on any state change
-    safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-    safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+    try {
+      safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+      safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+    } catch (_) {}
 
     if (currentSerialized === prevContentRef.current) return; // Cloud save already in sync
 
@@ -493,8 +510,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const handleImmediateSave = () => {
       if (activeProject && activeProject.id) {
-        safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-        safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+        saveProjectToIndexedDB(activeProject).catch(() => {});
+        try {
+          safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+          safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
+        } catch (_) {}
         saveProject();
       }
     };
@@ -680,8 +700,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...prev,
         pages: nextPages
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
     setSelectedElementId(newId);
@@ -707,8 +725,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...prev,
         pages: nextPages
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -730,8 +746,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
 
@@ -767,8 +781,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -797,8 +809,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -826,8 +836,6 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };

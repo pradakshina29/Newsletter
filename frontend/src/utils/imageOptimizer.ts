@@ -73,3 +73,50 @@ export const optimizeImageFile = async (
     img.src = objectUrl;
   });
 };
+
+/**
+ * Optimizes an existing base64 data URL string to compact JPEG (~100-200KB)
+ */
+export const optimizeBase64Image = async (
+  dataUrl: string,
+  maxWidth: number = 1200,
+  maxHeight: number = 1200,
+  quality: number = 0.82
+): Promise<string> => {
+  if (!dataUrl || !dataUrl.startsWith('data:image')) return dataUrl;
+  // If already small (< 120KB) or SVG, return directly
+  if (dataUrl.startsWith('data:image/svg+xml') || dataUrl.length < 160 * 1024) {
+    return dataUrl;
+  }
+
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.max(1, Math.round(width * ratio));
+        height = Math.max(1, Math.round(height * ratio));
+      }
+
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return resolve(dataUrl);
+
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, 0, 0, width, height);
+
+      try {
+        const optimized = canvas.toDataURL('image/jpeg', quality);
+        resolve(optimized.length < dataUrl.length ? optimized : dataUrl);
+      } catch (e) {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+};

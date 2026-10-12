@@ -4,6 +4,7 @@ import { Upload, FileText, Sparkles, Move, Layers, ArrowRight, ShieldCheck, Refr
 import CanvasWorkspace from './CanvasWorkspace';
 import { extractDocumentContent, parseReportEntities, deduplicateSentences } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
+import { optimizeImageFile } from '../../utils/imageOptimizer';
 
 interface ExtractedBlock {
   id: string;
@@ -42,18 +43,14 @@ const DualPaneStudio: React.FC<DualPaneStudioProps> = ({ onCloseSplitView, uploa
 
     try {
       if (file.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const imgUrl = e.target?.result as string;
-          const cleanName = detectAndFixCase(file.name.replace(/\.[^/.]+$/, "").replace(/[_\-]+/g, " "), 'title');
-          const parsed: ExtractedBlock[] = [
-            { id: `ext_${Date.now()}_1`, type: 'title', title: 'PHOTO TITLE', content: cleanName.toUpperCase() },
-            { id: `ext_${Date.now()}_2`, type: 'image', title: 'EVENT PHOTO', content: file.name, url: imgUrl }
-          ];
-          setExtractedBlocks(parsed);
-          setIsParsing(false);
-        };
-        reader.readAsDataURL(file);
+        const imgUrl = await optimizeImageFile(file);
+        const cleanName = detectAndFixCase(file.name.replace(/\.[^/.]+$/, "").replace(/[_\-]+/g, " "), 'title');
+        const parsed: ExtractedBlock[] = [
+          { id: `ext_${Date.now()}_1`, type: 'title', title: 'PHOTO TITLE', content: cleanName.toUpperCase() },
+          { id: `ext_${Date.now()}_2`, type: 'image', title: 'EVENT PHOTO', content: file.name, url: imgUrl }
+        ];
+        setExtractedBlocks(parsed);
+        setIsParsing(false);
         return;
       }
 
