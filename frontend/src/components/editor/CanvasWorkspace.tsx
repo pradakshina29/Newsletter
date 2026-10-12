@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useEditor, ensureCanonicalPageStructure } from '../../context/EditorContext';
+import { useNotification } from '../../context/NotificationContext';
 import { CanvasElement } from '../../types/editor';
 import { Sparkles, Wand2, X, Crop, Copy, Trash2, Move, ArrowUp, ArrowDown } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
@@ -88,6 +89,8 @@ const CanvasWorkspace: React.FC<{
     updatePageElements,
     isGenerating
   } = useEditor();
+
+  const { showConfirm, showSuccess } = useNotification();
 
   const workspaceRef = useRef<HTMLDivElement>(null);
 
@@ -185,15 +188,21 @@ const CanvasWorkspace: React.FC<{
         if (selectedElementId && activeProject) {
           const currentEl = activeProject.pages.flatMap(p => p.elements).find(el => el.id === selectedElementId);
           if (currentEl) {
+            e.preventDefault();
             const isImage = currentEl.type === 'image';
-            const ok = window.confirm(
+            showConfirm(
               isImage 
                 ? "Are you sure you want to delete this uploaded image?" 
-                : "Are you sure you want to delete this element?"
-            );
-            if (!ok) return;
-            e.preventDefault();
-            deleteElement(selectedElementId);
+                : "Are you sure you want to delete this element?",
+              isImage ? "Delete Image" : "Delete Element",
+              "Delete",
+              "Cancel"
+            ).then((ok) => {
+              if (ok) {
+                deleteElement(selectedElementId);
+                showSuccess("Element deleted successfully.", "Delete");
+              }
+            });
           }
         }
       }
@@ -777,16 +786,20 @@ const CanvasWorkspace: React.FC<{
               {/* Delete Button */}
               <button
                 type="button"
-                onClick={(e) => {
+                onClick={async (e) => {
                   e.stopPropagation();
                   const isImage = el.type === 'image';
-                  const ok = window.confirm(
+                  const ok = await showConfirm(
                     isImage 
                       ? "Are you sure you want to delete this uploaded image?" 
-                      : "Are you sure you want to delete this element?"
+                      : "Are you sure you want to delete this element?",
+                    isImage ? "Delete Image" : "Delete Element",
+                    "Delete",
+                    "Cancel"
                   );
                   if (!ok) return;
                   deleteElement(el.id);
+                  showSuccess("Element deleted.", "Delete");
                 }}
                 className="px-2 py-0.5 hover:bg-red-600/30 rounded text-red-400 hover:text-red-300 flex items-center space-x-1"
                 title="Delete Element (Delete)"

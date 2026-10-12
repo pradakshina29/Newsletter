@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useEditor } from '../../context/EditorContext';
+import { useNotification } from '../../context/NotificationContext';
 import { CanvasElement, TableElement } from '../../types/editor';
 import { AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Trash2, Copy, Lock, Unlock, ArrowUp, ArrowDown, Sparkles, Wand2, Type, Crop, Upload } from 'lucide-react';
 import { detectAndFixCase } from '../../utils/textCase';
@@ -24,6 +25,8 @@ const PropertiesPanel: React.FC = () => {
     setShowBleed,
     updateTheme
   } = useEditor();
+
+  const { showConfirm, showSuccess } = useNotification();
 
   const [aiLoading, setAiLoading] = useState<boolean>(false);
   const [showCropModal, setShowCropModal] = useState<boolean>(false);
@@ -172,15 +175,19 @@ const PropertiesPanel: React.FC = () => {
             <span>Duplicate</span>
           </button>
           <button
-            onClick={() => {
+            onClick={async () => {
               const isImage = el.type === 'image';
-              const ok = window.confirm(
+              const ok = await showConfirm(
                 isImage 
                   ? "Are you sure you want to delete this uploaded image?" 
-                  : "Are you sure you want to delete this element?"
+                  : "Are you sure you want to delete this element?",
+                isImage ? "Delete Image" : "Delete Element",
+                "Delete",
+                "Cancel"
               );
               if (!ok) return;
               deleteElement(el.id);
+              showSuccess("Element deleted.", "Delete");
             }}
             className="flex-1 py-2 bg-red-50 hover:bg-red-100 text-red-600 rounded-xl text-[10px] font-bold flex items-center justify-center space-x-1.5 border border-red-200"
           >

@@ -25,7 +25,7 @@ interface EditorWorkspaceProps {
 }
 
 const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onClose, darkMode, toggleDarkMode, initialPdfFile }) => {
-  const { showSuccess, showError, showWarning } = useNotification();
+  const { showSuccess, showError, showWarning, showConfirm } = useNotification();
   const {
     activeProject,
     selectedElementId,
@@ -126,8 +126,6 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
 
   const handleCloseAndSave = async () => {
-    const ok = window.confirm("Are you sure you want to return to the Dashboard? All your work will be saved.");
-    if (!ok) return;
     if (activeProject && activeProject.id) {
       safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
       safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
@@ -1088,15 +1086,21 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                     <span>Add Page</span>
                   </button>
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (activeProject && activeProject.pages.length <= 1) {
                         showWarning("Newsletter must have at least 1 page.", "Delete Page");
                         return;
                       }
                       const pageNum = (activeProject?.pages.findIndex(p => p.id === activePageId) ?? -1) + 1;
-                      const confirmed = window.confirm(`Are you sure you want to delete Page ${pageNum}? All content and uploaded images on this page will be removed.`);
+                      const confirmed = await showConfirm(
+                        `Are you sure you want to delete Page ${pageNum}? All content and uploaded images on this page will be permanently removed.`,
+                        "Delete Page",
+                        "Delete",
+                        "Cancel"
+                      );
                       if (!confirmed) return;
                       deletePage(activePageId);
+                      showSuccess(`Page ${pageNum} has been deleted.`, "Delete Page");
                     }}
                     className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm shadow-red-600/10"
                     title="Delete Current Page"

@@ -484,7 +484,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const interval = setTimeout(() => {
       saveProject();
       prevContentRef.current = currentSerialized;
-    }, 1000); // 1-second responsive autosave to cloud
+    }, 400); // 400ms responsive autosave to cloud
 
     return () => clearTimeout(interval);
   }, [activeProject, saveProject]);
@@ -499,11 +499,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = () => {
       handleImmediateSave();
-      e.preventDefault();
-      e.returnValue = 'Are you sure you want to leave? Your newsletter changes are saved.';
-      return e.returnValue;
     };
 
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -904,11 +901,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const deletePage = (pageId: string) => {
-    if (!activeProject) return;
-    if (activeProject.pages.length <= 1) {
-      alert("Newsletter must have at least 1 page.");
-      return;
-    }
+    if (!activeProject || activeProject.pages.length <= 1) return;
     pushState(activeProject.pages);
 
     // Keep all pages except the deleted one, preserving all their elements 100%
