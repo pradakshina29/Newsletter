@@ -4,6 +4,7 @@ import { useNotification } from '../../context/NotificationContext';
 import { Type, BookOpen, Image as ImageIcon, ChevronDown, ChevronUp, Upload, Sparkles, Plus, Trash2, RefreshCw, Shield, FileText, Calendar } from 'lucide-react';
 import { extractDocumentContent, parseReportEntities, deduplicateSentences, ParsedReportData, isBinaryOrXmlJunk, cleanAndSanitizeReportText } from '../../utils/documentParser';
 import { detectAndFixCase } from '../../utils/textCase';
+import { optimizeImageFile } from '../../utils/imageOptimizer';
 
 
 interface AccordionSectionProps {
@@ -866,54 +867,47 @@ const ContentWizardPanel: React.FC = () => {
     }
   };
 
-  const handleEditorPhotoUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleEditorPhotoUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          const newUrl = uploadEvent.target.result as string;
-          const targetPage = activeProject.pages[pageIndex];
-          if (targetPage) {
-            const exists = targetPage.elements.some(el => el.id === id);
-            let updated;
-            if (exists) {
-              updated = targetPage.elements.map(el => el.id === id ? { ...el, url: newUrl } : el);
-            } else {
-              const isChief = id.includes('chief');
-              updated = [...targetPage.elements, {
-                id,
-                type: 'image' as const,
-                x: isChief ? 135 : 485,
-                y: 340,
-                width: 180,
-                height: 180,
-                url: newUrl,
-                borderRadius: 90,
-                shadow: 'md' as const,
-                objectFit: 'cover' as const,
-                rotation: 0,
-                opacity: 100
-              }];
-            }
-            updatePageElements(targetPage.id, updated as any);
+      const newUrl = await optimizeImageFile(file);
+      if (newUrl) {
+        const targetPage = activeProject.pages[pageIndex];
+        if (targetPage) {
+          const exists = targetPage.elements.some(el => el.id === id);
+          let updated;
+          if (exists) {
+            updated = targetPage.elements.map(el => el.id === id ? { ...el, url: newUrl } : el);
+          } else {
+            const isChief = id.includes('chief');
+            updated = [...targetPage.elements, {
+              id,
+              type: 'image' as const,
+              x: isChief ? 135 : 485,
+              y: 340,
+              width: 180,
+              height: 180,
+              url: newUrl,
+              borderRadius: 90,
+              shadow: 'md' as const,
+              objectFit: 'cover' as const,
+              rotation: 0,
+              opacity: 100
+            }];
           }
+          updatePageElements(targetPage.id, updated as any);
         }
-      };
-      reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleLocalImageUpload = (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLocalImageUpload = async (id: string, e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onload = (uploadEvent) => {
-        if (uploadEvent.target?.result) {
-          handleImageChange(id, uploadEvent.target.result as string);
-        }
-      };
-      reader.readAsDataURL(file);
+      const optimizedUrl = await optimizeImageFile(file);
+      if (optimizedUrl) {
+        handleImageChange(id, optimizedUrl);
+      }
     }
   };
 
@@ -959,19 +953,16 @@ const ContentWizardPanel: React.FC = () => {
   }, [activePageId, activeProject]);
 
   // Multiple photos upload handler for Page-specific form
-  const handleMultiplePhotosUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMultiplePhotosUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const filesArray = Array.from(e.target.files);
-      filesArray.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (uploadEvent) => {
-          if (uploadEvent.target?.result) {
-            setPhotos((prev) => [...prev, uploadEvent.target!.result as string]);
-            setCaptions((prev) => [...prev, ""]);
-          }
-        };
-        reader.readAsDataURL(file);
-      });
+      for (const file of filesArray) {
+        const optimizedUrl = await optimizeImageFile(file);
+        if (optimizedUrl) {
+          setPhotos((prev) => [...prev, optimizedUrl]);
+          setCaptions((prev) => [...prev, ""]);
+        }
+      }
     }
   };
 
@@ -3861,20 +3852,18 @@ const ContentWizardPanel: React.FC = () => {
                       accept="image/*"
                       multiple
                       className="hidden"
-                      onChange={e => {
+                      onChange={async (e) => {
                         if (e.target.files && e.target.files.length > 0) {
-                          Array.from(e.target.files).slice(0, 3).forEach(file => {
-                            const reader = new FileReader();
-                            reader.onload = ev => {
-                              if (ev.target?.result) {
-                                setReportConfirmData(prev => prev ? {
-                                  ...prev,
-                                  photos: [...(prev.photos || []), ev.target?.result as string].slice(0, 3)
-                                } : null);
-                              }
-                            };
-                            reader.readAsDataURL(file);
-                          });
+                          const files = Array.from(e.target.files).slice(0, 3);
+                          for (const file of files) {
+                            const optimizedUrl = await optimizeImageFile(file);
+                            if (optimizedUrl) {
+                              setReportConfirmData(prev => prev ? {
+                                ...prev,
+                                photos: [...(prev.photos || []), optimizedUrl].slice(0, 3)
+                              } : null);
+                            }
+                          }
                         }
                       }}
                     />

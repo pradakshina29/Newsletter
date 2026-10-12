@@ -3,6 +3,7 @@ import { useEditor } from '../../context/EditorContext';
 import { Layout, Type, Image, Square, Upload, Sparkles, BookOpen, AlertCircle } from 'lucide-react';
 import { ProjectData } from '../../types/editor';
 import { extractDocumentContent } from '../../utils/documentParser';
+import { optimizeImageFile } from '../../utils/imageOptimizer';
 
 const TABS = [
   { id: 'templates', label: 'Templates', icon: Layout },
@@ -396,14 +397,20 @@ const SidebarTools: React.FC = () => {
       }
     }
 
-    // Default image upload handler
-    const reader = new FileReader();
-    reader.onload = (uploadEvent) => {
-      if (uploadEvent.target?.result) {
-        setUploads(prev => [uploadEvent.target!.result as string, ...prev]);
+    // Default image upload handler with client-side compression
+    optimizeImageFile(file).then(optimizedUrl => {
+      if (optimizedUrl) {
+        setUploads(prev => [optimizedUrl, ...prev]);
       }
-    };
-    reader.readAsDataURL(file);
+    }).catch(() => {
+      const reader = new FileReader();
+      reader.onload = (uploadEvent) => {
+        if (uploadEvent.target?.result) {
+          setUploads(prev => [uploadEvent.target!.result as string, ...prev]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   return (

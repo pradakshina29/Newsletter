@@ -4,6 +4,7 @@ import { CanvasElement, TableElement } from '../../types/editor';
 import { AlignLeft, AlignCenter, AlignRight, AlignJustify, Bold, Italic, Underline, Trash2, Copy, Lock, Unlock, ArrowUp, ArrowDown, Sparkles, Wand2, Type, Crop, Upload } from 'lucide-react';
 import { detectAndFixCase } from '../../utils/textCase';
 import { ImageCropModal } from './ImageCropModal';
+import { optimizeImageFile } from '../../utils/imageOptimizer';
 
 const FONTS = ['Poppins', 'Arial', 'Times New Roman', 'Georgia', 'Courier New', 'Monospace'];
 
@@ -669,15 +670,12 @@ const PropertiesPanel: React.FC = () => {
                 <input
                   type="file"
                   accept="image/*"
-                  onChange={e => {
+                  onChange={async (e) => {
                     if (e.target.files && e.target.files[0]) {
-                      const reader = new FileReader();
-                      reader.onload = (uploadEv) => {
-                        if (uploadEv.target?.result) {
-                          handleUpdate({ url: uploadEv.target.result as string });
-                        }
-                      };
-                      reader.readAsDataURL(e.target.files[0]);
+                      const optimizedUrl = await optimizeImageFile(e.target.files[0]);
+                      if (optimizedUrl) {
+                        handleUpdate({ url: optimizedUrl, userMoved: true });
+                      }
                     }
                   }}
                   className="hidden"

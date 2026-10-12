@@ -18,6 +18,7 @@ export interface BaseElement {
   rotation: number; // 0 to 360 degrees
   locked?: boolean;
   zIndex?: number;
+  userMoved?: boolean;
 }
 
 export interface TextElement extends BaseElement {

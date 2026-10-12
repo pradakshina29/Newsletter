@@ -251,20 +251,10 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   }
 
   if (photoEls.length > 0) {
-    // Deduplicate photos by URL
-    const uniquePhotos: any[] = [];
-    const seenUrls = new Set<string>();
-    for (const ph of photoEls) {
-      const urlKey = ((ph as any).url || '').trim();
-      if (urlKey && !seenUrls.has(urlKey)) {
-        seenUrls.add(urlKey);
-        uniquePhotos.push(ph);
-      }
-    }
-
-    const totalP = uniquePhotos.length;
-    uniquePhotos.forEach((photo, idx) => {
-      // PRESERVE CUSTOM USER DRAGGED POSITIONS
+    // Preserve all photo elements without dropping duplicates
+    const totalP = photoEls.length;
+    photoEls.forEach((photo, idx) => {
+      // PRESERVE CUSTOM USER POSITIONS
       const userX = (photo as any).x;
       const userY = (photo as any).y;
       const isMoved = (photo as any).userMoved;
@@ -309,14 +299,16 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
         height = 160;
       }
 
+      const hasCustomPos = isMoved || (userX !== undefined && userX !== 50) || (userY !== undefined && userY !== 550 && userY >= 215);
+
       realignedContent.push({
         ...photo,
-        x: isMoved ? userX : defaultX,
-        y: isMoved ? userY : defaultY,
+        x: hasCustomPos ? userX : defaultX,
+        y: hasCustomPos ? userY : defaultY,
         width: (photo as any).width || width,
         height: (photo as any).height || height,
-        borderRadius: 10,
-        shadow: 'md'
+        borderRadius: (photo as any).borderRadius !== undefined ? (photo as any).borderRadius : 10,
+        shadow: (photo as any).shadow || 'md'
       } as any);
     });
   }
@@ -337,6 +329,28 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       ...canonicalFooter
     ]
   };
+};
+
+export const safeSaveToLocalStorage = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k !== key && k !== 'token' && k !== 'user' && (k.startsWith('local_project_') || k.startsWith('last_autosaved_'))) {
+            keysToRemove.push(k);
+          }
+        }
+        keysToRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(key, value);
+      } catch (err2) {
+        console.warn('LocalStorage quota limit reached:', err2);
+      }
+    }
+  }
 };
 
 export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -392,12 +406,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setActiveProject(normalizedProject);
     if (normalizedProject.id) {
-      try {
-        localStorage.setItem(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
-        localStorage.setItem(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
-      } catch (e) {
-        console.warn("localStorage quota exceeded or write skipped:", e);
-      }
+      safeSaveToLocalStorage(`local_project_${normalizedProject.id}`, JSON.stringify(normalizedProject));
+      safeSaveToLocalStorage(`last_autosaved_${normalizedProject.id}`, new Date().toISOString());
     }
     if (normalizedProject.pages && normalizedProject.pages.length > 0) {
       setActivePageId(prev => {
@@ -414,13 +424,9 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const proj = projectToSave || activeProject;
     if (!proj || !proj.id) return;
 
-    // Immediately cache to localStorage so sudden tab closes or navigation lose nothing
-    try {
-      localStorage.setItem(`local_project_${proj.id}`, JSON.stringify(proj));
-      localStorage.setItem(`last_autosaved_${proj.id}`, new Date().toISOString());
-    } catch (err) {
-      console.warn('LocalStorage save warning:', err);
-    }
+    // Immediately cache to localStorage with quota-safe protection
+    safeSaveToLocalStorage(`local_project_${proj.id}`, JSON.stringify(proj));
+    safeSaveToLocalStorage(`last_autosaved_${proj.id}`, new Date().toISOString());
 
     const authToken = token || localStorage.getItem('token') || 'default_admin_token';
     
@@ -471,10 +477,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     // Always immediately sync to local storage on any state change
-    try {
-      localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-      localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
-    } catch (e) {}
+    safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+    safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
 
     if (currentSerialized === prevContentRef.current) return; // Cloud save already in sync
 
@@ -490,10 +494,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   useEffect(() => {
     const handleImmediateSave = () => {
       if (activeProject && activeProject.id) {
-        try {
-          localStorage.setItem(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
-          localStorage.setItem(`last_autosaved_${activeProject.id}`, new Date().toISOString());
-        } catch (e) {}
+        safeSaveToLocalStorage(`local_project_${activeProject.id}`, JSON.stringify(activeProject));
+        safeSaveToLocalStorage(`last_autosaved_${activeProject.id}`, new Date().toISOString());
         saveProject();
       }
     };
@@ -675,10 +677,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...prev,
         pages: nextPages
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
     setSelectedElementId(newId);
@@ -704,10 +704,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         ...prev,
         pages: nextPages
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -729,10 +727,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
 
@@ -768,10 +764,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -800,10 +794,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };
@@ -831,10 +823,8 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
-      try {
-        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
-        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
-      } catch (e) {}
+      safeSaveToLocalStorage(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+      safeSaveToLocalStorage(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
       return updatedProject;
     });
   };

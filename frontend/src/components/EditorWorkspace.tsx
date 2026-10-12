@@ -547,18 +547,22 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
   // PDF Export Engine (Multi-page canvas render scaling)
   // Helper to convert any HTTP image URL to Data URL for 100% CORS-safe PDF capture
-  const ensureImageDataUrl = async (url: string): Promise<string> => {
+  const ensureImageDataUrl = async (url: string, cache?: Map<string, string>): Promise<string> => {
     if (!url || url.startsWith('data:')) return url;
+    if (cache && cache.has(url)) return cache.get(url)!;
     try {
       const response = await fetch(url, { mode: 'cors' });
       const blob = await response.blob();
-      return await new Promise<string>((resolve) => {
+      const dataUrl = await new Promise<string>((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve((reader.result as string) || url);
         reader.onerror = () => resolve(url);
         reader.readAsDataURL(blob);
       });
+      if (cache) cache.set(url, dataUrl);
+      return dataUrl;
     } catch (e) {
+      if (cache) cache.set(url, url);
       return url;
     }
   };
@@ -608,6 +612,9 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         format: 'a4'
       });
 
+      // Cache converted images across pages so repeated assets (logos, headers) convert once
+      const imageCache = new Map<string, string>();
+
       for (let pageIdx = 0; pageIdx < activeProject.pages.length; pageIdx++) {
         const rawPage = activeProject.pages[pageIdx];
         const page = ensureCanonicalPageStructure(rawPage, pageIdx + 1, activeProject.department || "Information Technology");
@@ -616,15 +623,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
         // Preload external images to base64 Data URLs so html2canvas never drops CORS images
         const elementsWithDataUrls = await Promise.all((page.elements || []).map(async (el: any) => {
           if (el.type === 'image' && el.url) {
-            const dataUrl = await ensureImageDataUrl(el.url);
+            const dataUrl = await ensureImageDataUrl(el.url, imageCache);
             return { ...el, url: dataUrl };
           }
           return el;
         }));
 
-        // Render page DOM unscaled with embedded Google Fonts
+        // Render page DOM unscaled with preloaded fonts and #EFEFEF background
         exportContainer.innerHTML = `
-          <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700&family=Inter:wght@400;600;700&family=Merriweather:ital,wght@0,400;0,700;1,400&family=Playfair+Display:ital,wght@0,400..900;1,400..900&family=Poppins:ital,wght@0,300;0,400;0,600;0,700;1,400&display=swap">
           <div style="position: relative; width: 800px; height: 1130px; background-color: ${pageBgColor}; overflow: hidden; font-family: 'Poppins', sans-serif;">
             ${elementsWithDataUrls.map((el: any) => {
               if (el.type === 'shape') {
@@ -657,7 +663,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           if (img.complete) resolve(true);
           else { img.onload = () => resolve(true); img.onerror = () => resolve(true); }
         })));
-        await new Promise(r => setTimeout(r, 150));
+        await new Promise(r => setTimeout(r, 40));
 
         const canvasObj = await html2canvas(exportContainer, {
           scale: 2,
