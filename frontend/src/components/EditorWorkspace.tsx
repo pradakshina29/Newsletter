@@ -495,17 +495,27 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                   ];
                 }
               } else {
-                // If an intermediate page has Editorial Board elements (e.g. Page 8 when total pages = 13), revert it to a standard page header
+                // If an intermediate page has Editorial Board elements (e.g. Page 8 when total pages = 13), strip the editorial board widgets while preserving user elements
                 if (hasRibbon) {
                   page.title = `Page ${pNum}`;
-                  page.elements = [
-                    { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                    { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-                    { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-                    { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-                  ];
+                  const editorialIds = ['_ribbon_bg', '_ribbon_text', '_badge_chief', '_badge_co', '_pic_chief', '_name_chief', '_desig_chief', '_dept_chief', '_pic_co', '_name_co', '_desig_co', '_dept_co', '_line_div', '_diamond_div'];
+                  const remainingElements = (page.elements || []).filter((el: any) => {
+                    const id = el.id || '';
+                    return !editorialIds.some(key => id.includes(key));
+                  });
+                  // If page has no elements remaining other than background/header, ensure standard header is present
+                  if (remainingElements.length <= 1) {
+                    page.elements = [
+                      { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+                      { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+                      { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                      { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+                      { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+                      { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+                    ];
+                  } else {
+                    page.elements = remainingElements;
+                  }
                 }
               }
               return page;
@@ -652,17 +662,18 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
 
       await document.fonts.ready;
 
-      // Hidden container element at 1:1 scale with low opacity for crisp, distortion-free capture
+      // Hidden container element at 1:1 scale for crisp, distortion-free capture
       const exportContainer = document.createElement('div');
-      exportContainer.style.position = 'absolute';
+      exportContainer.style.position = 'fixed';
       exportContainer.style.top = '0';
       exportContainer.style.left = '0';
       exportContainer.style.width = '800px';
       exportContainer.style.height = '1130px';
       exportContainer.style.backgroundColor = '#EFEFEF';
-      exportContainer.style.opacity = '0.01';
+      exportContainer.style.opacity = '1';
       exportContainer.style.pointerEvents = 'none';
       exportContainer.style.zIndex = '-9999';
+      exportContainer.style.overflow = 'hidden';
       document.body.appendChild(exportContainer);
 
       const getFontStack = (font?: string) => {
@@ -701,8 +712,10 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           <div style="position: relative; width: 800px; height: 1130px; background-color: ${pageBgColor}; overflow: hidden; font-family: 'Poppins', sans-serif;">
             ${elementsWithDataUrls.map((el: any) => {
               if (el.type === 'shape') {
-                if (el.id?.includes('line_div') || el.id?.includes('diamond_div')) return '';
                 return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; background-color: ${el.fillColor || '#000000'}; border-radius: ${el.borderRadius || 0}px; opacity: ${(el.opacity ?? 100) / 100}; transform: rotate(${el.rotation || 0}deg);"></div>`;
+              }
+              if (el.type === 'divider') {
+                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height || 2}px; background-color: ${el.color || '#cbd5e1'}; opacity: ${(el.opacity ?? 100) / 100};"></div>`;
               }
               if (el.type === 'text') {
                 const fontStack = getFontStack(el.fontFamily);
@@ -713,6 +726,9 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
               if (el.type === 'image' && el.url) {
                 const fit = el.objectFit || (el.id?.includes('logo') ? 'contain' : 'cover');
                 return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; overflow: hidden; border-radius: ${el.borderRadius || 0}px; box-shadow: ${el.shadow === 'sm' ? '0 1px 2px rgba(0,0,0,0.05)' : el.shadow === 'md' ? '0 4px 6px rgba(0,0,0,0.1)' : el.shadow === 'lg' ? '0 10px 15px rgba(0,0,0,0.1)' : 'none'};"><img src="${el.url}" style="width: 100%; height: 100%; object-fit: ${fit}; display: block; border-radius: ${el.borderRadius || 0}px;" /></div>`;
+              }
+              if (el.type === 'table' && Array.isArray(el.data)) {
+                return `<div style="position: absolute; left: ${el.x}px; top: ${el.y}px; width: ${el.width}px; height: ${el.height}px; overflow: hidden;"><table style="width: 100%; height: 100%; border-collapse: collapse; font-size: 11px;">${el.data.map((row: string[]) => `<tr>${row.map(cell => `<td style="border: 1px solid #cbd5e1; padding: 4px;">${cell}</td>`).join('')}</tr>`).join('')}</table></div>`;
               }
               return '';
             }).join('')}
@@ -732,7 +748,15 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           useCORS: true,
           logging: false,
           allowTaint: true,
-          backgroundColor: pageBgColor
+          backgroundColor: pageBgColor,
+          width: 800,
+          height: 1130,
+          windowWidth: 800,
+          windowHeight: 1130,
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0
         });
 
         const imgData = canvasObj.toDataURL('image/jpeg', 0.98);

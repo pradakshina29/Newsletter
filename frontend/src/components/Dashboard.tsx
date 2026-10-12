@@ -1038,17 +1038,19 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                     <div className="space-y-4">
                       {filteredProjects.filter(p => p.status !== 'PUBLISHED').map(proj => {
                         const isExpanded = expandedProjectId === proj.id;
+                        const pageCount = proj.pages?.length || 8;
 
-                        const pageTitles = [
-                          'Page 1: Cover Page',
-                          'Page 2: Student Achievement',
-                          'Page 3: Student Activity',
-                          'Page 4: Department Event',
-                          'Page 5: Freshers Welcome',
-                          'Page 6: Induction Program',
-                          'Page 7: Faculty Achievement',
-                          'Page 8: Editorial Board'
-                        ];
+                        const pageTitles = Array.from({ length: pageCount }, (_, idx) => {
+                          const pNum = idx + 1;
+                          if (proj.pages && proj.pages[idx]?.title) return `Page ${pNum}: ${proj.pages[idx].title}`;
+                          if (pNum === 1) return 'Page 1: Cover Page';
+                          if (pNum === pageCount) return `Page ${pNum}: Editorial Board`;
+                          const standardNames = [
+                            '', 'Student Achievement', 'Student Activity', 'Department Event',
+                            'Freshers Welcome', 'Induction Program', 'Faculty Achievement'
+                          ];
+                          return `Page ${pNum}: ${standardNames[pNum - 1] || 'Content Page'}`;
+                        });
 
                         return (
                           <div 
@@ -1064,7 +1066,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                                   }`}>
                                     {proj.status.replace('_', ' ')}
                                   </span>
-                                  <span className="text-xs text-slate-400 font-medium">| {proj.category} • 8 A4 Pages</span>
+                                  <span className="text-xs text-slate-400 font-medium">| {proj.category} • {pageCount} A4 Pages</span>
                                 </div>
                                 <h4 className="font-extrabold text-base text-secondary dark:text-white">{proj.name}</h4>
                                 <div className="flex items-center space-x-2 text-[10px] text-slate-400 pt-0.5">
@@ -1149,7 +1151,7 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                                 <button 
                                   onClick={() => setExpandedProjectId(isExpanded ? null : proj.id!)} 
                                   className="px-2.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 border border-slate-200/80 dark:border-slate-700 rounded-xl text-slate-600 dark:text-slate-300 font-bold text-xs flex items-center space-x-1"
-                                  title="Manage Pages 1-8"
+                                  title={`Manage Pages 1-${pageCount}`}
                                 >
                                   <Layers className="w-4 h-4 text-slate-600" />
                                   <span className="text-[10px]">{isExpanded ? '▲' : '▼'}</span>
@@ -1157,12 +1159,12 @@ const Dashboard: React.FC<DashboardProps> = ({ user, onLogout, onEditProject, on
                               </div>
                             </div>
 
-                            {/* Page 1-8 Management Matrix (Collapsible) */}
+                            {/* Page Management Matrix (Collapsible) */}
                             {isExpanded && (
                               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2 animate-in fade-in duration-200">
                                 <div className="flex items-center justify-between">
-                                  <h5 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Page Status Matrix (Pages 1–8)</h5>
-                                  <span className="text-[10px] text-green-600 font-bold">All 8 Pages Ready</span>
+                                  <h5 className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Page Status Matrix (Pages 1–{pageCount})</h5>
+                                  <span className="text-[10px] text-green-600 font-bold">All {pageCount} Pages Ready</span>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                                   {pageTitles.map((pTitle, idx) => {
@@ -1817,10 +1819,10 @@ Students enjoyed hands-on sessions and received certificates.`}
             <div className="p-5 bg-slate-900 text-white flex items-center justify-between border-b border-slate-800">
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center font-bold text-white text-xs">
-                  8
+                  {previewProject.pages?.length || 8}
                 </div>
                 <div>
-                  <h3 className="text-sm font-extrabold">{previewProject.name} — Full 8-Page Preview</h3>
+                  <h3 className="text-sm font-extrabold">{previewProject.name} — Full {previewProject.pages?.length || 8}-Page Preview</h3>
                   <p className="text-[10px] text-slate-400">Official Department of {previewProject.department} Newsletter</p>
                 </div>
               </div>
@@ -1848,10 +1850,10 @@ Students enjoyed hands-on sessions and received certificates.`}
             {/* Preview Pages Grid / Scroll */}
             <div className="p-6 flex-grow overflow-y-auto bg-slate-100 dark:bg-slate-950 space-y-6">
               <div className="text-center text-xs font-bold text-slate-500 mb-2">
-                Showing all 8 A4 pages rendered with exact reference layouts
+                Showing all {previewProject.pages?.length || 8} A4 pages rendered with exact reference layouts
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map(pNum => {
+                {Array.from({ length: previewProject.pages?.length || 8 }, (_, i) => i + 1).map(pNum => {
                   const titles = [
                     'Page 1: Cover Page',
                     'Page 2: Student Achievement',
@@ -1862,23 +1864,27 @@ Students enjoyed hands-on sessions and received certificates.`}
                     'Page 7: Faculty Achievement',
                     'Page 8: Editorial Board'
                   ];
+                  const totalP = previewProject.pages?.length || 8;
+                  const displayTitle = previewProject.pages && previewProject.pages[pNum - 1]?.title
+                    ? `Page ${pNum}: ${previewProject.pages[pNum - 1].title}`
+                    : (pNum <= 8 ? titles[pNum - 1] : (pNum === totalP ? `Page ${pNum}: Editorial Board` : `Page ${pNum}: Content Page`));
 
                   return (
                     <div key={pNum} className="bg-white dark:bg-slate-900 rounded-2xl p-4 border border-slate-200 dark:border-slate-800 shadow-sm space-y-2">
                       <div className="flex items-center justify-between text-xs border-b border-slate-100 dark:border-slate-800 pb-2">
-                        <span className="font-extrabold text-secondary dark:text-white">{titles[pNum - 1]}</span>
+                        <span className="font-extrabold text-secondary dark:text-white">{displayTitle}</span>
                         <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700">Ready</span>
                       </div>
                       <div className="h-64 bg-slate-50 dark:bg-slate-950 rounded-xl border border-slate-200 dark:border-slate-800 p-3 flex flex-col justify-between text-[10px] text-slate-500 overflow-hidden relative">
                         <div className="flex justify-between items-center border-b pb-1 border-slate-300">
-                          <span className="font-bold text-[8px] uppercase">DEPT OF INFORMATION TECHNOLOGY</span>
+                          <span className="font-bold text-[8px] uppercase">DEPT OF {previewProject.department?.toUpperCase() || 'INFORMATION TECHNOLOGY'}</span>
                           <span className="font-bold text-[8px]">JUNE 2026</span>
                         </div>
                         <div className="text-center py-2 font-bold text-slate-800 dark:text-slate-200 text-xs">
                           CTRL+READ
                         </div>
                         <div className="text-center text-[9px] font-semibold text-slate-600 dark:text-slate-400">
-                          {pNum === 1 ? 'SCHOOL OF COMPUTING SCIENCE' : pNum === 8 ? 'EDITORIAL BOARD' : titles[pNum - 1].replace(/Page \d: /, '').toUpperCase()}
+                          {pNum === 1 ? 'SCHOOL OF COMPUTING SCIENCE' : pNum === totalP ? 'EDITORIAL BOARD' : displayTitle.replace(/Page \d+:? ?/, '').toUpperCase()}
                         </div>
                         <div className="flex-grow flex items-center justify-center text-[9px] text-slate-400 italic">
                           {pNum === 1 ? '[Campus Cover Photo]' :
@@ -1888,10 +1894,11 @@ Students enjoyed hands-on sessions and received certificates.`}
                            pNum === 5 ? '[6 Freshers Orientation Photos]' :
                            pNum === 6 ? '[5 Induction Program Photos]' :
                            pNum === 7 ? '[Faculty Poster & 3 Session Photos]' :
-                           '[Chief & Co-Editor Profiles]'}
+                           pNum === totalP ? '[Chief & Co-Editor Profiles]' :
+                           '[Custom Article & Event Details]'}
                         </div>
                         <div className="text-center text-[8px] text-slate-400 border-t pt-1">
-                          Page {pNum} • Official publication of the Department of Information Technology
+                          Page {pNum} • Official publication of the Department of {previewProject.department || 'Information Technology'}
                         </div>
                       </div>
                     </div>
@@ -1902,7 +1909,7 @@ Students enjoyed hands-on sessions and received certificates.`}
 
             {/* Preview Footer */}
             <div className="p-4 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className="text-slate-500">Document formatted as 8 A4 pages with crisp high resolution</span>
+              <span className="text-slate-500">Document formatted as {previewProject.pages?.length || 8} A4 pages with crisp high resolution</span>
               <button
                 onClick={() => {
                   const id = previewProject.id;
@@ -1911,7 +1918,7 @@ Students enjoyed hands-on sessions and received certificates.`}
                 }}
                 className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl text-xs shadow-sm"
               >
-                Generate & Export 8-Page PDF
+                Generate & Export {previewProject.pages?.length || 8}-Page PDF
               </button>
             </div>
           </div>

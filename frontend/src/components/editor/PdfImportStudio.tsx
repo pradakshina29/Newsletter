@@ -639,11 +639,14 @@ const PdfImportStudio: React.FC<PdfImportStudioProps> = ({ onClose, initialFile 
 
       const exportContainer = document.createElement('div');
       exportContainer.style.position = 'fixed';
-      exportContainer.style.left = '-9999px';
-      exportContainer.style.top = '-9999px';
+      exportContainer.style.left = '0';
+      exportContainer.style.top = '0';
       exportContainer.style.width = '800px';
       exportContainer.style.height = '1130px';
       exportContainer.style.zIndex = '-9999';
+      exportContainer.style.opacity = '1';
+      exportContainer.style.pointerEvents = 'none';
+      exportContainer.style.overflow = 'hidden';
       document.body.appendChild(exportContainer);
 
       const totalPages = activeProject.pages.length;
@@ -682,7 +685,15 @@ const PdfImportStudio: React.FC<PdfImportStudioProps> = ({ onClose, initialFile 
           useCORS: true,
           logging: false,
           allowTaint: true,
-          backgroundColor: '#EFEFEF'
+          backgroundColor: '#EFEFEF',
+          width: 800,
+          height: 1130,
+          windowWidth: 800,
+          windowHeight: 1130,
+          x: 0,
+          y: 0,
+          scrollX: 0,
+          scrollY: 0
         });
 
         const imgData = canvasObj.toDataURL('image/jpeg', 0.98);

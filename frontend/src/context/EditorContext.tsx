@@ -119,7 +119,7 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const hostEl = nonHeaderElements.find((el: any) => el.type === 'text' && el.id.includes('_host'));
   const categoryTagEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('category') || el.id.includes('tag') || el.id.includes('badge') || el.id.includes('section')));
   const bodyEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_text') || el.id.includes('_body') || el.id.includes('_content') || el.id.includes('_paragraph') || el.id.includes('_desc')));
-  const photoEls = nonHeaderElements.filter((el: any) => el.type === 'image' && !el.id.includes('logo') && !el.id.includes('pic_'));
+  const photoEls = nonHeaderElements.filter((el: any) => el.type === 'image' && !el.id.includes('logo') && !el.id.includes('pic_') && !el.id.includes('pdf_page'));
   
   // Exclude duplicate/redundant title/sub/body text elements from otherEls to prevent duplication
   const otherEls = nonHeaderElements.filter((el: any) => {
@@ -663,17 +663,23 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const nextPages = prev.pages.map(page => {
+        if (page.id !== activePageId) return page;
+        const nextZIndex = page.elements.length + 1;
+        return {
+          ...page,
+          elements: [...page.elements, { ...newElement, zIndex: nextZIndex }]
+        };
+      });
+      const updatedProject = {
         ...prev,
-        pages: prev.pages.map(page => {
-          if (page.id !== activePageId) return page;
-          const nextZIndex = page.elements.length + 1;
-          return {
-            ...page,
-            elements: [...page.elements, { ...newElement, zIndex: nextZIndex }]
-          };
-        })
+        pages: nextPages
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
     setSelectedElementId(newId);
   };
@@ -683,20 +689,26 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const nextPages = prev.pages.map(page => {
+        const hasTarget = page.elements.some(el => el.id === elementId);
+        if (!hasTarget) return page;
+        return {
+          ...page,
+          elements: page.elements.map(el => {
+            if (el.id !== elementId) return el;
+            return { ...el, ...updates } as CanvasElement;
+          })
+        };
+      });
+      const updatedProject = {
         ...prev,
-        pages: prev.pages.map(page => {
-          const hasTarget = page.elements.some(el => el.id === elementId);
-          if (!hasTarget) return page;
-          return {
-            ...page,
-            elements: page.elements.map(el => {
-              if (el.id !== elementId) return el;
-              return { ...el, ...updates } as CanvasElement;
-            })
-          };
-        })
+        pages: nextPages
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
   };
 
@@ -841,28 +853,34 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     });
 
-    // Clean previous last page if it had Editorial Board elements
+    // Clean previous last page if it had Editorial Board elements, preserving user content
     const currentHeaderDate = (oldPages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
 
     const updatedOldPages = oldPages.map((p, idx) => {
       const pNum = idx + 1;
       const hasRibbon = p.elements?.some((el: any) => el.id?.includes('_ribbon_text') || el.id === 'p8_ribbon_text');
       if (hasRibbon) {
+        const editorialIds = ['_ribbon_bg', '_ribbon_text', '_badge_chief', '_badge_co', '_pic_chief', '_name_chief', '_desig_chief', '_dept_chief', '_pic_co', '_name_co', '_desig_co', '_dept_co', '_line_div', '_diamond_div'];
+        const remainingElements = (p.elements || []).filter((el: any) => {
+          const id = el.id || '';
+          return !editorialIds.some(key => id.includes(key));
+        });
+        const elementsToUse = remainingElements.length > 1 ? remainingElements : [
+          { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+          { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
+          { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
+          { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+          { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
+          { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+          { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
+          { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+          { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
+          { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
+        ];
         return {
           ...p,
           title: `Page ${pNum}`,
-          elements: [
-            { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-            { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-            { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
-            { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
-            { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
-            { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
-            { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${activeProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-          ]
+          elements: elementsToUse
         };
       }
       return p;
@@ -910,14 +928,14 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ] as CanvasElement[]
     };
 
-    setActiveProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        pages: [...updatedOldPages, newEditorialPage] as Page[]
-      };
-    });
+    const newProject: ProjectData = {
+      ...activeProject,
+      pages: [...updatedOldPages, newEditorialPage] as Page[]
+    };
+
+    setActiveProject(newProject);
     setActivePageId(newPageId);
+    saveProject(newProject);
   };
 
   const duplicatePage = (pageId: string) => {
@@ -944,16 +962,16 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       elements: duplicatedElements
     };
 
-    setActiveProject(prev => {
-      if (!prev) return null;
-      const nextPages = [...prev.pages];
-      nextPages.splice(pageIndex + 1, 0, newPage); // Insert right after original
-      return {
-        ...prev,
-        pages: nextPages
-      };
-    });
+    const nextPages = [...activeProject.pages];
+    nextPages.splice(pageIndex + 1, 0, newPage); // Insert right after original
+    const newProject: ProjectData = {
+      ...activeProject,
+      pages: nextPages
+    };
+
+    setActiveProject(newProject);
     setActivePageId(newPageId);
+    saveProject(newProject);
   };
 
   const deletePage = (pageId: string) => {
@@ -1040,13 +1058,13 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return page;
     });
 
-    setActiveProject(prev => {
-      if (!prev) return null;
-      return {
-        ...prev,
-        pages: updatedPages as Page[]
-      };
-    });
+    const newProject: ProjectData = {
+      ...activeProject,
+      pages: updatedPages as Page[]
+    };
+
+    setActiveProject(newProject);
+    saveProject(newProject);
 
     // Reset active page ID safely
     const deletedIndex = activeProject.pages.findIndex(p => p.id === pageId);
@@ -1068,17 +1086,18 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     
-    setActiveProject(prev => {
-      if (!prev) return null;
-      const nextPages = [...prev.pages];
-      const temp = nextPages[index];
-      nextPages[index] = nextPages[targetIndex];
-      nextPages[targetIndex] = temp;
-      return {
-        ...prev,
-        pages: nextPages
-      };
-    });
+    const nextPages = [...activeProject.pages];
+    const temp = nextPages[index];
+    nextPages[index] = nextPages[targetIndex];
+    nextPages[targetIndex] = temp;
+
+    const newProject: ProjectData = {
+      ...activeProject,
+      pages: nextPages
+    };
+
+    setActiveProject(newProject);
+    saveProject(newProject);
   };
 
   const updatePageElements = (pageId: string, elements: CanvasElement[]) => {
