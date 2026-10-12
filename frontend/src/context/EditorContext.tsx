@@ -95,11 +95,14 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
       id === `p${pNum}_bg` || id.endsWith('_bg') ||
       id.includes('dept_hdr') || id.includes('date_hdr') ||
       id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('footer_text') ||
-      id.includes('meta_line')
+      id.includes('meta_line') || id.includes('line_hdr')
     );
   });
 
-  if (isCoverPage || isEditorialPage) {
+  // If this is a cover page, an editorial page, or an EXTRA page (pNum > 8 or user-created page),
+  // PRESERVE ALL user elements completely without flattening into a single-article template!
+  const isExtraPage = pNum > 8 || (page.id?.startsWith('page_') && !['page_1', 'page_2', 'page_3', 'page_4', 'page_5', 'page_6', 'page_7', 'page_8'].includes(page.id));
+  if (isCoverPage || isEditorialPage || isExtraPage) {
     return {
       ...page,
       elements: [
@@ -121,13 +124,9 @@ export const ensureCanonicalPageStructure = (page: Page, pNum: number, deptName:
   const bodyEl = nonHeaderElements.find((el: any) => el.type === 'text' && (el.id.includes('_text') || el.id.includes('_body') || el.id.includes('_content') || el.id.includes('_paragraph') || el.id.includes('_desc')));
   const photoEls = nonHeaderElements.filter((el: any) => el.type === 'image' && !el.id.includes('logo') && !el.id.includes('pic_') && !el.id.includes('pdf_page'));
   
-  // Exclude duplicate/redundant title/sub/body text elements from otherEls to prevent duplication
+  // Exclude elements already in realignedContent, but NEVER delete other user elements
   const otherEls = nonHeaderElements.filter((el: any) => {
     if (el === titleEl || el === subEl || el === hostEl || el === categoryTagEl || el === bodyEl || photoEls.includes(el)) return false;
-    const lowerId = (el.id || '').toLowerCase();
-    if (titleEl && (lowerId.includes('_title') || lowerId.includes('title_')) && !lowerId.includes('sub')) return false;
-    if (subEl && (lowerId.includes('_sub') || lowerId.includes('sub_'))) return false;
-    if (bodyEl && (lowerId.includes('_text') || lowerId.includes('_body') || lowerId.includes('_content') || lowerId.includes('_paragraph') || lowerId.includes('_desc'))) return false;
     return true;
   });
 
@@ -429,6 +428,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const response = await fetch(`/api/projects/${proj.id}`, {
         method: 'PUT',
+        keepalive: true,
         headers: {
           'Content-Type': 'application/json',
           ...(authToken ? { 'Authorization': `Bearer ${authToken}` } : {})
@@ -718,7 +718,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const updatedProject = {
         ...prev,
         pages: prev.pages.map(page => {
           const hasTarget = page.elements.some(el => el.id === elementId);
@@ -729,6 +729,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
 
     if (selectedElementId === elementId) {
@@ -743,7 +748,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     let createdId = '';
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const updatedProject = {
         ...prev,
         pages: prev.pages.map(page => {
           const target = page.elements.find(el => el.id === elementId);
@@ -763,8 +768,12 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
-
   };
 
   // Adjust layer orders
@@ -773,7 +782,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushState(activeProject.pages);
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const updatedProject = {
         ...prev,
         pages: prev.pages.map(page => {
           if (page.id !== activePageId) return page;
@@ -791,6 +800,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
   };
 
@@ -799,7 +813,7 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     pushState(activeProject.pages);
     setActiveProject(prev => {
       if (!prev) return null;
-      return {
+      const updatedProject = {
         ...prev,
         pages: prev.pages.map(page => {
           if (page.id !== activePageId) return page;
@@ -817,6 +831,11 @@ export const EditorProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           };
         })
       };
+      try {
+        localStorage.setItem(`local_project_${updatedProject.id}`, JSON.stringify(updatedProject));
+        localStorage.setItem(`last_autosaved_${updatedProject.id}`, new Date().toISOString());
+      } catch (e) {}
+      return updatedProject;
     });
   };
 

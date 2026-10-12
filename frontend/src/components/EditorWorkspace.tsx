@@ -210,9 +210,15 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
       const serverScore = countUserContent(serverPages);
       const cachedScore = countUserContent(cachedPages);
 
+      // Determine if cachedProject has more pages or has recent content
+      const hasExtraPagesInCache = cachedPages.length > serverPages.length;
+      const lastCachedTime = localStorage.getItem(`last_autosaved_${projectId}`);
+      const cachedTimestamp = lastCachedTime ? new Date(lastCachedTime).getTime() : 0;
+      const serverTimestamp = serverProject?.updatedAt ? new Date(serverProject.updatedAt).getTime() : 0;
+
       let projectToUse: any = null;
 
-      if (cachedProject && (cachedScore >= serverScore || serverPages.length === 0)) {
+      if (cachedProject && (hasExtraPagesInCache || cachedTimestamp >= serverTimestamp || cachedScore >= serverScore || serverPages.length === 0)) {
         projectToUse = {
           ...cachedProject,
           pages: cachedPages.length > 0 ? cachedPages : (serverPages.length > 0 ? serverPages : []),
@@ -258,110 +264,6 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
             console.error("Error parsing project content JSON:", jsonErr);
           }
         }
-
-          // Support dynamic page structures with Cover Page logos & Editorial Board
-          if (Array.isArray(parsedProject.pages)) {
-            const deptUpper = (parsedProject.department || "Information Technology").toUpperCase();
-
-            parsedProject.pages = parsedProject.pages.map((p: any, idx: number) => {
-              const pageNum = idx + 1;
-              const isFirstPage = pageNum === 1;
-              const isLastPage = pageNum === parsedProject.pages.length;
-              let elements = p.elements || [];
-
-              // Clean duplicate headers, intrusive divider lines, & unsplash placeholders
-              elements = elements.filter((el: any) => {
-                if (el.type === 'image' && el.url && el.url.includes("unsplash.com")) return false;
-                const id = (el.id || '').toLowerCase();
-
-                if (id === `p${pageNum}_bg` || id.endsWith('_bg') ||
-                    id.includes('line_hdr') || id.includes('dept_hdr') || id.includes('date_hdr') ||
-                    id.includes('title_hdr') || id.includes('subtitle_hdr') || id.includes('newsletter_title') ||
-                    id.includes('line_div') || id.includes('diamond_div')) {
-                  return false;
-                }
-
-                if (isFirstPage && (id.includes('ribbon') || id.includes('chief') || id.includes('co_editor') || id.includes('_co_') || id.includes('editorial'))) {
-                  return false;
-                }
-
-                if (!isFirstPage && (id.includes('kprcas_logo') || id.includes('launchit_logo') || id.includes('school_text') || id.includes('cover_img') || id.includes('cover_caption'))) {
-                  return false;
-                }
-
-                if (!isLastPage && (id.includes('ribbon') || id.includes('chief') || id.includes('co_editor') || id.includes('editorial'))) {
-                  return false;
-                }
-
-                return true;
-              });
-
-              // Prepend clean header
-              const cleanHeader = [
-                { id: `p${pageNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "left", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "right", lineHeight: 1.4, letterSpacing: 0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 1.5, lineHeight: 1.0, opacity: 100, rotation: 0, locked: true },
-                { id: `p${pageNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, italic: false, underline: false, align: "center", letterSpacing: 2.5, lineHeight: 1.4, opacity: 100, rotation: 0, locked: true }
-              ];
-
-              // Page 1 Cover Page additions
-              if (isFirstPage) {
-                const hasLogos = elements.some((el: any) => el.id === 'p1_kprcas_logo');
-                if (!hasLogos) {
-                  elements.push(
-                    { id: "p1_kprcas_logo", type: "image", x: 50, y: 200, width: 330, height: 100, url: "/assets/kprcas_logo.jpg", borderRadius: 0, objectFit: "contain" },
-                    { id: "p1_launchit_logo", type: "image", x: 420, y: 200, width: 330, height: 100, url: "/assets/launchit_logo.jpg", borderRadius: 0, objectFit: "contain" },
-                    { id: "p1_school_text", type: "text", x: 50, y: 315, width: 700, height: 25, text: "SCHOOL OF COMPUTING SCIENCE", fontSize: 15, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center", letterSpacing: 1.0 },
-                    { id: "p1_dept_text", type: "text", x: 50, y: 345, width: 700, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 14, fontFamily: "Poppins", color: "#475569", bold: true, align: "center", letterSpacing: 1.0 },
-                    { id: "p1_cover_img", type: "image", x: 50, y: 380, width: 700, height: 575, url: "/assets/kprcas_campus.png", borderRadius: 12, shadow: "lg", objectFit: "cover" },
-                    { id: "p1_cover_caption", type: "text", x: 50, y: 970, width: 700, height: 20, text: "KPRCAS Main Campus • Official Department Newsletter Cover Page", fontSize: 9, fontFamily: "Poppins", color: "#64748b", italic: true, align: "center" }
-                  );
-                }
-              }
-
-              // Page Editorial Board additions for the LAST page of newsletter
-              if (isLastPage) {
-                const hasRibbon = elements.some((el: any) => el.id.includes('ribbon_text'));
-                if (!hasRibbon) {
-                  p.title = "Editorial Board";
-                  elements.push(
-                    { id: `p${pageNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
-                    { id: `p${pageNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
-                    { id: `p${pageNum}_badge_chief_bg`, type: "shape", shapeType: "rect", x: 105, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                    { id: `p${pageNum}_badge_chief_text`, type: "text", x: 105, y: 297, width: 240, height: 20, text: "CHIEF EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pageNum}_pic_chief`, type: "image", x: 135, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" },
-                    { id: `p${pageNum}_name_chief`, type: "text", x: 50, y: 540, width: 350, height: 25, text: "DR. S. SRIVIDHYA", fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                    { id: `p${pageNum}_desig_chief`, type: "text", x: 50, y: 565, width: 350, height: 20, text: "ASSOCIATE PROFESSOR AND HEAD", fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pageNum}_dept_chief`, type: "text", x: 50, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pageNum}_badge_co_bg`, type: "shape", shapeType: "rect", x: 455, y: 290, width: 240, height: 32, fillColor: "#ddd6fe", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 6 },
-                    { id: `p${pageNum}_badge_co_text`, type: "text", x: 455, y: 297, width: 240, height: 20, text: "CO EDITOR", fontSize: 13, fontFamily: "Playfair Display", color: "#4c1d95", bold: true, align: "center", letterSpacing: 1.5 },
-                    { id: `p${pageNum}_pic_co`, type: "image", x: 485, y: 340, width: 180, height: 180, url: "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=400&q=80", borderRadius: 90, shadow: "md", objectFit: "cover" },
-                    { id: `p${pageNum}_name_co`, type: "text", x: 400, y: 540, width: 350, height: 25, text: "MR. AKHIL K M", fontSize: 14, fontFamily: "Poppins", color: "#0f172a", bold: true, align: "center" },
-                    { id: `p${pageNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: "ASSISTANT PROFESSOR", fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pageNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
-                    { id: `p${pageNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pageNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
-                  );
-                }
-              }
-
-              // Ensure body text elements are formatted as continuous paragraphs (no bullet points or line breaks)
-              elements = elements.map((el: any) => {
-                if (el.type === 'text' && el.text && (el.id.endsWith('_text') || el.id.endsWith('_desc') || el.id.endsWith('_content') || el.id.endsWith('_msg') || el.id.endsWith('_paragraph'))) {
-                  const cleaned = el.text
-                    .replace(/^[•\-\*\d+\.]\s*/gm, '')
-                    .replace(/[\r\n]+/g, ' ')
-                    .replace(/[•\*]/g, ' ')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-                  return { ...el, text: cleaned };
-                }
-                return el;
-              });
-
-              return { ...p, elements: [...cleanHeader, ...elements] };
-            });
-          }
 
           if (!parsedProject.theme) {
             parsedProject.theme = { primary: '#1e40af', secondary: '#0f172a', accent: '#f97316', background: '#EFEFEF' };
@@ -436,6 +338,7 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
           } else if (parsedProject.pages.length > 0) {
             const deptUpper = (parsedProject.department || "Information Technology").toUpperCase();
             const lastIdx = parsedProject.pages.length - 1;
+            const currentHeaderDate = (parsedProject.pages[0]?.elements?.find((el: any) => el.id?.includes('date_hdr') || el.id?.includes('hdr_date')) as any)?.text || "OCTOBER 2026";
 
             // Extract existing editorial board values (chief name, role, co name, role, pics)
             let chiefName = "DR. S. SRIVIDHYA";
@@ -469,10 +372,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                 if (!hasRibbon) {
                   page.elements = [
                     { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+                    { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                    { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                    { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+                    { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
                     { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+                    { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
 
                     { id: `p${pNum}_ribbon_bg`, type: "shape", shapeType: "rect", x: 80, y: 220, width: 640, height: 40, fillColor: "#e2e8f0", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, borderRadius: 4 },
                     { id: `p${pNum}_ribbon_text`, type: "text", x: 80, y: 228, width: 640, height: 30, text: "EDITORIAL BOARD", fontSize: 20, fontFamily: "Playfair Display", color: "#0f172a", bold: true, align: "center", letterSpacing: 3.0 },
@@ -491,6 +398,11 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                     { id: `p${pNum}_desig_co`, type: "text", x: 400, y: 565, width: 350, height: 20, text: coRole, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
                     { id: `p${pNum}_dept_co`, type: "text", x: 400, y: 585, width: 350, height: 20, text: `DEPT. OF ${deptUpper}`, fontSize: 11, fontFamily: "Poppins", color: "#334155", bold: false, align: "center" },
 
+                    { id: `p${pNum}_line_div_left`, type: "shape", shapeType: "rect", x: 50, y: 640, width: 320, height: 2, fillColor: "#000000" },
+                    { id: `p${pNum}_diamond_div1`, type: "shape", shapeType: "rect", x: 380, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
+                    { id: `p${pNum}_diamond_div2`, type: "shape", shapeType: "rect", x: 410, y: 636, width: 10, height: 10, fillColor: "#000000", rotation: 45 },
+                    { id: `p${pNum}_line_div_right`, type: "shape", shapeType: "rect", x: 430, y: 640, width: 320, height: 2, fillColor: "#000000" },
+
                     { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
                   ];
                 }
@@ -507,10 +419,14 @@ const EditorWorkspace: React.FC<EditorWorkspaceProps> = ({ projectId, user, onCl
                   if (remainingElements.length <= 1) {
                     page.elements = [
                       { id: `p${pNum}_bg`, type: "shape", shapeType: "rect", x: 0, y: 0, width: 800, height: 1130, fillColor: "#EFEFEF", strokeColor: "transparent", strokeWidth: 0, opacity: 100, rotation: 0, locked: true },
+                      { id: `p${pNum}_line_hdr0`, type: "shape", shapeType: "rect", x: 50, y: 40, width: 700, height: 1, fillColor: "#000000" },
                       { id: `p${pNum}_dept_hdr`, type: "text", x: 50, y: 52, width: 450, height: 25, text: `DEPARTMENT OF ${deptUpper}`, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "left" },
-                      { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: "JUNE 2026", fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                      { id: `p${pNum}_date_hdr`, type: "text", x: 500, y: 52, width: 250, height: 25, text: currentHeaderDate, fontSize: 12, fontFamily: "Poppins", color: "#000000", bold: true, align: "right" },
+                      { id: `p${pNum}_line_hdr1`, type: "shape", shapeType: "rect", x: 50, y: 85, width: 700, height: 1, fillColor: "#000000" },
                       { id: `p${pNum}_title_hdr`, type: "text", x: 50, y: 98, width: 700, height: 65, text: "CTRL+READ", fontSize: 52, fontFamily: "Playfair Display", color: "#000000", bold: true, align: "center", letterSpacing: 1.5 },
+                      { id: `p${pNum}_line_hdr2_left`, type: "shape", shapeType: "rect", x: 50, y: 180, width: 240, height: 1, fillColor: "#000000" },
                       { id: `p${pNum}_subtitle_hdr`, type: "text", x: 300, y: 170, width: 200, height: 20, text: "NEWS LETTER", fontSize: 11, fontFamily: "Poppins", color: "#000000", bold: true, align: "center", letterSpacing: 2.5 },
+                      { id: `p${pNum}_line_hdr2_right`, type: "shape", shapeType: "rect", x: 510, y: 180, width: 240, height: 1, fillColor: "#000000" },
                       { id: `p${pNum}_footer_text`, type: "text", x: 50, y: 1090, width: 700, height: 20, text: `Page ${pNum} • Official publication of the Department of ${parsedProject.department || "Information Technology"}`, fontSize: 9, fontFamily: "Poppins", color: "#94a3b8", bold: false, align: "center" }
                     ];
                   } else {
